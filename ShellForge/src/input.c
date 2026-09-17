@@ -8,7 +8,7 @@ char *read_line(void)
 {
     int size = INITIAL_SIZE;
     int position = 0;
-    char *buffer = malloc(size);
+    char *buffer = malloc((size_t)size);
 
     if (buffer == NULL)
     {
@@ -16,11 +16,9 @@ char *read_line(void)
         exit(EXIT_FAILURE);
     }
 
-    int ch;
-
     while (1)
     {
-        ch = getchar();
+        int ch = getchar();
 
         if (ch == EOF || ch == '\n')
         {
@@ -28,18 +26,21 @@ char *read_line(void)
             return buffer;
         }
 
-        buffer[position++] = ch;
+        buffer[position++] = (char)ch;
 
         if (position >= size)
         {
             size *= 2;
-            buffer = realloc(buffer, size);
 
-            if (buffer == NULL)
+            char *new_buffer = realloc(buffer, (size_t)size);
+            if (new_buffer == NULL)
             {
+                free(buffer);
                 fprintf(stderr, "Memory Allocation Failed\n");
                 exit(EXIT_FAILURE);
             }
+
+            buffer = new_buffer;
         }
     }
 }

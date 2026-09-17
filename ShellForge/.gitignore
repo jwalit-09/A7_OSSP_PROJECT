@@ -1,0 +1,13 @@
+# Compiled executable
+bin/shellforge
+
+# Object files
+*.o
+
+# Other compiled/debug files
+*.out
+
+# Editor settings
+.vscode/
+.idea/
+*~

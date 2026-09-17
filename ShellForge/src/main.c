@@ -3,35 +3,49 @@
 #include <string.h>
 #include "../include/shell.h"
 #include "../include/input.h"
+#include "../include/parser.h"
+#include "../include/process.h"
+#include "../include/builtin.h"
+#include "../include/signals.h"
 
 int main(void)
 {
     char *line;
+    char **tokens;
 
-    printf("=================================\n");
+    initialize_signals();
+
+    printf("=====================================\n");
     printf("%s Version %s\n", SHELL_NAME, VERSION);
-    printf("=================================\n");
+    printf("=====================================\n");
 
     while (1)
     {
         printf("myshell> ");
+        fflush(stdout);
 
         line = read_line();
 
-        if (strcmp(line, "exit") == 0)
+        if (line == NULL)
+            break;
+
+        if (strlen(line) == 0)
         {
             free(line);
-            break;
+            continue;
         }
 
-        if (strlen(line) != 0)
+        tokens = parse_line(line);
+
+        if (tokens[0] != NULL)
         {
-            printf("You entered : %s\n", line);
+            if (execute_builtin(tokens) == 0)
+                execute(tokens);
         }
 
+        free_tokens(tokens);
         free(line);
     }
 
-    printf("Goodbye!\n");
     return 0;
 }
