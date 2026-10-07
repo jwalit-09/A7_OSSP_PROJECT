@@ -1,12 +1,19 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L -g -Iinclude
+CFLAGS = -Wall -Wextra -g -Iinclude
+LDFLAGS = -pthread
 
 SRC = src/main.c \
       src/input.c \
       src/parser.c \
       src/process.c \
       src/builtin.c \
-      src/signals.c
+      src/fileops.c \
+      src/search.c \
+      src/perms.c \
+      src/signals.c \
+      src/pipes.c \
+      src/redirect.c \
+      src/thread.c
 
 TARGET = bin/shellforge
 
@@ -14,12 +21,16 @@ all: $(TARGET)
 
 $(TARGET): $(SRC)
 	mkdir -p bin
-	$(CC) $(CFLAGS) $(SRC) -o $(TARGET)
+	$(CC) $(CFLAGS) $(SRC) $(LDFLAGS) -o $(TARGET)
+
+asan: $(SRC)
+	mkdir -p bin
+	$(CC) $(CFLAGS) -fsanitize=address $(SRC) $(LDFLAGS) -o $(TARGET)
 
 run: $(TARGET)
 	./$(TARGET)
 
 clean:
-	rm -rf bin/shellforge
+	rm -rf bin/*
 
-.PHONY: all run clean
+.PHONY: all asan run clean

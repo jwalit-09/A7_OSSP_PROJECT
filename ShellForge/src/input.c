@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "../include/input.h"
+#include "input.h"
 
 #define INITIAL_SIZE 64
 
@@ -8,39 +8,41 @@ char *read_line(void)
 {
     int size = INITIAL_SIZE;
     int position = 0;
-    char *buffer = malloc((size_t)size);
-
+    char *buffer = malloc(size);
     if (buffer == NULL)
     {
         fprintf(stderr, "Memory Allocation Failed\n");
         exit(EXIT_FAILURE);
     }
-
+    int ch;
     while (1)
     {
-        int ch = getchar();
-
-        if (ch == EOF || ch == '\n')
+        ch = getchar();
+        if (ch == EOF)
+        {
+            if (position == 0)
+            {
+                free(buffer);
+                return NULL;
+            }
+            buffer[position] = '\0';
+            return buffer;
+        }
+        if (ch == '\n')
         {
             buffer[position] = '\0';
             return buffer;
         }
-
-        buffer[position++] = (char)ch;
-
+        buffer[position++] = ch;
         if (position >= size)
         {
             size *= 2;
-
-            char *new_buffer = realloc(buffer, (size_t)size);
-            if (new_buffer == NULL)
+            buffer = realloc(buffer, size);
+            if (buffer == NULL)
             {
-                free(buffer);
                 fprintf(stderr, "Memory Allocation Failed\n");
                 exit(EXIT_FAILURE);
             }
-
-            buffer = new_buffer;
         }
     }
 }
