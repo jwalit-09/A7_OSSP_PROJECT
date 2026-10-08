@@ -1,175 +1,120 @@
-# ShellForge — File System Management Shell
+# ShellForge — File System Management Shell & Weekly Milestones
 
 ShellForge is a Unix-like interactive command-line shell developed in C for the **Operating Systems and Systems Programming (OSSP)** Project-Based Learning curriculum.
 
-It serves as a comprehensive system software demonstrating process management, POSIX system calls, Inter-Process Communication (IPC), file descriptors, I/O redirection, dynamic memory allocation, and concurrency.
+This repository contains both:
+1. **The Complete Unified Shell** in `ShellForge/` (Weeks 1 through 10 + File System Management Shell).
+2. **Weekly Milestone Implementations** in `milestones/` (Isolated, independently compilable folders for Week 1 through Week 6).
 
 ---
 
-## 🏛️ System Architecture
+## 📂 Repository Structure
 
 ```text
-                User Command
-                     │
-                     ▼
-             +---------------+
-             |   Tokenizer   |  (strtok / dynamic argv[])
-             +---------------+
-                     │
-          +----------+----------+
-          │                     │
-          ▼                     ▼
-   [Pipeline '|']        [Redirection '>', '>>', '<', '2>']
-   (pipe & dup2)         (open & dup2)
-          │                     │
-          +----------+----------+
-                     │
-          +----------+----------+
-          │                     │
-          ▼                     ▼
-  [Built-in Commands]   [External Programs]
-  (Executed in Shell)   (fork + execvp + waitpid)
-          │                     │
-          +----------+----------+
-                     │
-                     ▼
-           Linux Kernel (POSIX APIs)
+A7_OSSP_PROJECT/
+├── README.md               # Main project documentation
+│
+├── milestones/             # Independent weekly lab submissions (Weeks 1 to 6)
+│   ├── week1_repl/         # Week 1: Basic REPL Loop & Makefile
+│   ├── week2_memory/       # Week 2: Dynamic Memory (malloc, realloc, free)
+│   ├── week3_parser/       # Week 3: Tokenizer & argv[] Construction
+│   ├── week4_processes/    # Week 4: Process Execution (fork, execvp, waitpid)
+│   ├── week5_builtins/     # Week 5: Built-in Commands (cd, pwd, env, etc.)
+│   └── week6_signals/      # Week 6: Signal Handling (SIGINT, SIGCHLD)
+│
+└── ShellForge/             # Full Final Project (Weeks 1 to 10 + File System Management)
+    ├── Makefile            # Build system with -pthread and -fsanitize=address
+    ├── include/            # All header files
+    ├── src/                # All C implementation modules
+    ├── tests/              # Automated end-to-end test suite
+    └── README.md           # ShellForge specific documentation
 ```
 
 ---
 
-## 🌟 Implemented Features
+## 🏃 How to Run Each Weekly Milestone (Week 1 to Week 6)
 
-### 1. Core REPL & Process Management (Weeks 1–5)
-- **Interactive REPL Loop**: Displays active working prompt, reads arbitrary line lengths with dynamic memory (`malloc`/`realloc`/`free`).
-- **Command Parsing**: Tokenizes input strings into NULL-terminated `argv[]` vectors.
-- **Process Spawning**: Child execution using `fork()`, program image replacement with `execvp()`, parent synchronization with `waitpid()`.
+Each milestone folder is completely standalone with its own Makefile and source code:
 
-### 2. Built-in Commands & Environment Variables (Week 5 & File Operations)
-- `cd <dir>`: Directory navigation via `chdir()`.
-- `pwd`: Current directory lookup via `getcwd()`.
-- `env`: Displays environment variables via `getenv()`.
-- `clear`, `exit`, `help`.
-
-### 3. Signals & Process Control (Week 6)
-- **SIGINT Handler**: Catches <kbd>Ctrl</kbd> + <kbd>C</kbd> cleanly so the shell survives without terminating.
-- **SIGCHLD Handler**: Automatic background zombie process harvesting using `waitpid(-1, NULL, WNOHANG)`.
-
-### 4. Anonymous Pipes & IPC (Week 7)
-- Unidirectional process-to-process pipelines (`cmd1 | cmd2`).
-- Kernel pipe allocation via `pipe(pipefd)`.
-- Stream duplication using `dup2()`.
-
-### 5. Memory Safety & Debugging (Week 8)
-- Memory leak analysis with **Valgrind** (`--leak-check=full`).
-- Interactive debugging support with **GDB** (`-g` symbols).
-- Memory corruption & buffer overflow checks with **AddressSanitizer (ASan)** (`make asan`).
-
-### 6. File Descriptors & I/O Redirection (Week 9)
-- Standard Output Overwrite (`>`) via `O_WRONLY | O_CREAT | O_TRUNC`.
-- Standard Output Append (`>>`) via `O_WRONLY | O_CREAT | O_APPEND`.
-- Standard Input Redirection (`<`) via `O_RDONLY`.
-- Standard Error Redirection (`2>`) via `dup2(fd, STDERR_FILENO)`.
-
-### 7. POSIX Threads & Concurrency (Week 10)
-- Background monitor thread created using `pthread_create()`.
-- Detached thread execution with `pthread_detach()`.
-- Heartbeat status logging without interrupting the foreground REPL prompt.
-
-### 8. File System Management (Implementation Plan Phases 2, 5 & 6)
-- **File Management**: `touch` (`O_CREAT` + `utime`), `mkdir` (`mkdir`), `rmdir` (`rmdir`), `cat` (`read`/`write`), `cp` (buffered read/write), `mv` (`rename`), `rm` (`unlink`), `ls` (`opendir`/`readdir`).
-- **Search & Recursion**: `find` (with `-name` and `-type` filtering via `fnmatch`), `ls -R`, `cp -r`, `rm -r`.
-- **Permissions**: `ls -l` (detailed metadata with permissions, owner, group, size, time), `stat`, `chmod` (octal modes), `chown`.
-
----
-
-## 🛠️ Project Structure
-
-```text
-ShellForge/
-├── Makefile                # Build automation configuration
-├── README.md               # Project documentation and specifications
-│
-├── include/                # Header files (.h)
-│   ├── shell.h             # Core constants and version
-│   ├── input.h             # Dynamic line reading prototypes
-│   ├── parser.h            # Tokenization declarations
-│   ├── process.h           # fork/exec/wait prototypes
-│   ├── builtin.h           # Shell built-ins dispatcher
-│   ├── fileops.h           # POSIX file system operations
-│   ├── search.h            # Recursive directory walker & find
-│   ├── perms.h             # Permissions and file metadata
-│   ├── signals.h           # Signal handling declarations
-│   ├── pipes.h             # Pipe execution declarations
-│   ├── redirect.h          # Redirection handling declarations
-│   └── thread.h            # POSIX background thread monitor
-│
-├── src/                    # Source files (.c)
-│   ├── main.c              # REPL loop and dispatcher
-│   ├── input.c             # Dynamic buffer input management
-│   ├── parser.c            # Tokenizer
-│   ├── process.c           # Process creation and execution
-│   ├── builtin.c           # Built-in command implementations
-│   ├── fileops.c           # touch, mkdir, rmdir, cat, cp, mv, rm, ls
-│   ├── search.c            # find, recursive copy/remove/listing
-│   ├── perms.c             # ls -l, stat, chmod, chown
-│   ├── signals.c           # SIGINT & SIGCHLD handlers
-│   ├── pipes.c             # Two-stage pipeline execution
-│   ├── redirect.c          # >, >>, <, 2> redirection
-│   └── thread.c            # Pthread background worker
-│
-├── tests/
-│   └── run_tests.sh        # Automated verification script
-└── bin/                    # Compiled binaries
-```
-
----
-
-## 🚀 Build and Run
-
-### 1. Compile the Shell
+### Week 1: Basic REPL Loop
 ```bash
-make clean
-make
-```
-
-### 2. Run ShellForge
-```bash
+cd milestones/week1_repl
+make clean && make
 make run
 ```
-or directly:
+
+### Week 2: Dynamic Memory Management
 ```bash
-./bin/shellforge
+cd milestones/week2_memory
+make clean && make
+make run
 ```
 
-### 3. Build with AddressSanitizer (Memory Debugging)
+### Week 3: Command Parser
 ```bash
-make asan
-./bin/shellforge
+cd milestones/week3_parser
+make clean && make
+make run
 ```
 
-### 4. Execute Automated Test Suite
+### Week 4: Process Execution
 ```bash
+cd milestones/week4_processes
+make clean && make
+make run
+```
+
+### Week 5: Built-in Commands & Environment Variables
+```bash
+cd milestones/week5_builtins
+make clean && make
+make run
+```
+
+### Week 6: Signals & Process Control
+```bash
+cd milestones/week6_signals
+make clean && make
+make run
+```
+
+---
+
+## 🚀 How to Run the Complete Final Shell (Weeks 1 to 10 + File System Shell)
+
+The full shell incorporates:
+- **Week 7**: Anonymous Pipes (`cmd1 | cmd2`) via `pipe()` and `dup2()`
+- **Week 8**: Memory Debugging & Valgrind verification
+- **Week 9**: Stream Redirection (`>`, `>>`, `<`, `2>`)
+- **Week 10**: POSIX Background Thread Monitoring (`pthread_create`)
+- **File System Shell**: `touch`, `mkdir`, `rmdir`, `cat`, `cp -r`, `mv`, `rm -r`, `find`, `ls -l`, `stat`, `chmod`, `chown`
+
+```bash
+cd ShellForge
+make clean && make
+make run
+```
+
+### Run Automated Test Suite
+```bash
+cd ShellForge
 ./tests/run_tests.sh
 ```
 
 ---
 
-## 📊 System Calls Reference
+## 📊 System Calls & Concepts Covered
 
-| System Call | Purpose in ShellForge |
-|---|---|
-| `fork()` | Clones shell process to execute commands |
-| `execvp()` | Replaces child image with binary in `$PATH` |
-| `waitpid()` | Reaps children and synchronizes foreground execution |
-| `pipe()` | Creates kernel buffer for Inter-Process Communication |
-| `dup2()` | Clones file descriptors for redirection & pipelines |
-| `open()` | Opens files with `O_CREAT`, `O_TRUNC`, `O_APPEND` |
-| `read()` / `write()` | Low-level file I/O for `cat` and `cp` |
-| `stat()` / `lstat()` | Inode metadata extraction for `ls -l` and `stat` |
-| `opendir()` / `readdir()` | Directory stream traversal |
-| `chmod()` | Updates permission bits |
-| `rename()` | Atomic file moving |
-| `unlink()` / `rmdir()` | File and directory removal |
-| `signal()` | Installs `SIGINT` and `SIGCHLD` handlers |
-| `pthread_create()` | Launches asynchronous background monitoring thread |
+| Week / Phase | Concepts Demonstrated | System Calls / APIs |
+|---|---|---|
+| **Week 1** | REPL Loop, Make build automation, Git workflow | `fgets()`, `strcmp()` |
+| **Week 2** | Dynamic memory heap management | `malloc()`, `realloc()`, `free()` |
+| **Week 3** | Lexical analysis, command line arguments | `strtok()`, `argv[]` array |
+| **Week 4** | Process creation and lifecycle | `fork()`, `execvp()`, `waitpid()` |
+| **Week 5** | Shell built-ins, working directory, environment | `chdir()`, `getcwd()`, `getenv()` |
+| **Week 6** | Asynchronous signals, zombie reaping | `signal()`, `SIGINT`, `SIGCHLD`, `WNOHANG` |
+| **Week 7** | Inter-Process Communication (IPC), Pipelines | `pipe()`, `dup2()`, `close()` |
+| **Week 8** | Memory safety, leak detection, defensive coding | `valgrind`, `gdb`, AddressSanitizer |
+| **Week 9** | File descriptors, stream redirection | `open()`, `O_CREAT`, `O_TRUNC`, `O_APPEND` |
+| **Week 10** | Multithreading, background concurrency | `pthread_create()`, `pthread_detach()` |
+| **File System Shell** | Inode inspection, permissions, recursive ops | `stat()`, `chmod()`, `opendir()`, `readdir()`, `unlink()` |
