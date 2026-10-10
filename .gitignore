@@ -1,4 +1,38 @@
+# ShellForge — root .gitignore
+
+# Build artifacts
 bin/
-*.o
-*.out
-*.exe
+backend/shellforge_adapter
+backend/node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Python (old web/ folder)
+web/backend/__pycache__/
+web/backend/*.pyc
+*.egg-info/
+
+# Editor
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Test artifacts
+__test_dir__/
+/tmp/shellforge_ws/

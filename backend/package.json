@@ -1,0 +1,19 @@
+{
+  "name": "shellforge-backend",
+  "version": "1.0.0",
+  "description": "ShellForge File Manager – Node.js/Express REST API",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "build:adapter": "gcc -Wall -Wextra -O2 shellforge_adapter.c -o shellforge_adapter",
+    "test": "node tests/api.test.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1"
+  }
+}

@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShellForge — File System Management Shell</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Alpine.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  <!-- Socket.IO -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { mono: ['JetBrains Mono', 'Fira Code', 'Cascadia Code', 'monospace'] },
+          colors: {
+            terminal: {
+              bg: '#1e1e2e',
+              panel: '#181825',
+              sidebar: '#11111b',
+              border: '#313244',
+              accent: '#cba6f7',
+              green: '#a6e3a1',
+              red: '#f38ba8',
+              yellow: '#f9e2af',
+              blue: '#89b4fa',
+              cyan: '#89dceb',
+              text: '#cdd6f4',
+              muted: '#6c7086',
+              prompt: '#a6e3a1',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    * { box-sizing: border-box; }
+    body { background: #1e1e2e; color: #cdd6f4; font-family: 'JetBrains Mono', monospace; overflow: hidden; height: 100vh; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #181825; }
+    ::-webkit-scrollbar-thumb { background: #313244; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #45475a; }
+
+    /* Terminal output styling */
+    .terminal-output { white-space: pre-wrap; word-break: break-all; font-size: 13px; line-height: 1.5; }
+    .output-stdout { color: #cdd6f4; }
+    .output-stderr { color: #f38ba8; }
+    .output-success { color: #a6e3a1; }
+    .output-info { color: #89b4fa; }
+    .output-blocked { color: #fab387; }
+    .output-prompt { color: #a6e3a1; font-weight: bold; }
+    .output-timestamp { color: #6c7086; font-size: 11px; }
+
+    /* File icon colors */
+    .icon-dir { color: #89b4fa; }
+    .icon-c { color: #f38ba8; }
+    .icon-h { color: #fab387; }
+    .icon-sh { color: #a6e3a1; }
+    .icon-md { color: #89dceb; }
+    .icon-txt { color: #cdd6f4; }
+    .icon-file { color: #6c7086; }
+
+    /* Blinking cursor */
+    @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+    .cursor { display: inline-block; width: 8px; height: 14px; background: #cba6f7; animation: blink 1s step-end infinite; vertical-align: text-bottom; margin-left: 1px; }
+
+    /* Tab styling */
+    .tab-active { border-bottom: 2px solid #cba6f7; color: #cba6f7; }
+    .tab-inactive { border-bottom: 2px solid transparent; color: #6c7086; }
+    .tab-inactive:hover { color: #cdd6f4; }
+
+    /* Progress bar */
+    .progress-bar { height: 4px; border-radius: 2px; transition: width 0.3s ease; }
+
+    /* Sidebar item hover */
+    .file-item { transition: background 0.1s ease; cursor: pointer; }
+    .file-item:hover { background: #313244; }
+    .file-item.selected { background: #45475a; }
+
+    /* Input glow */
+    .cmd-input:focus { outline: none; box-shadow: 0 0 0 1px #cba6f7; }
+
+    /* Typing animation for welcome */
+    @keyframes typeIn { from { width: 0; } to { width: 100%; } }
+    .typewriter { overflow: hidden; white-space: nowrap; animation: typeIn 2s steps(40) 0.5s both; }
+
+    /* Pulse dot */
+    @keyframes pulseDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .pulse-dot { animation: pulseDot 2s ease-in-out infinite; }
+
+    /* Resize handle */
+    .resize-handle { cursor: ns-resize; user-select: none; }
+    .resize-handle:hover { background: #cba6f7; opacity: 0.5; }
+
+    /* Notification toast */
+    .toast { animation: slideIn 0.3s ease; }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    /* Syntax highlighting for C */
+    .kw { color: #cba6f7; }
+    .fn { color: #89b4fa; }
+    .str { color: #a6e3a1; }
+    .cm { color: #6c7086; font-style: italic; }
+    .num { color: #fab387; }
+    .pp { color: #f38ba8; }
+    .tp { color: #f9e2af; }
+  </style>
+</head>
+
+<body class="dark" x-data="shellforgeApp()" x-init="init()">
+
+  <!-- ═══════════════════════════════════════ TOP BAR ═══════════════════════════════════════ -->
+  <div class="flex items-center justify-between px-4 py-2 border-b border-terminal-border" style="background:#11111b; height:48px;">
+    <!-- Left: Logo -->
+    <div class="flex items-center gap-3">
+      <div class="flex gap-1.5">
+        <div class="w-3 h-3 rounded-full bg-red-500 cursor-pointer" @click="showAbout=true" title="About"></div>
+        <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+        <div class="w-3 h-3 rounded-full bg-green-500"></div>
+      </div>
+      <div class="flex items-center gap-2 ml-2">
+        <i class="fa-solid fa-terminal text-terminal-accent text-sm"></i>
+        <span class="text-terminal-accent font-bold text-sm tracking-wider">ShellForge</span>
+        <span class="text-terminal-muted text-xs">v1.0</span>
+      </div>
+      <!-- Path breadcrumb -->
+      <div class="hidden md:flex items-center gap-1 ml-4 text-xs text-terminal-muted">
+        <i class="fa-solid fa-folder-open text-terminal-yellow text-xs"></i>
+        <span class="text-terminal-text" x-text="currentPath || 'workspace'"></span>
+      </div>
+    </div>
+
+    <!-- Center: Status -->
+    <div class="flex items-center gap-4 text-xs">
+      <div class="flex items-center gap-1.5">
+        <div class="w-2 h-2 rounded-full bg-terminal-green pulse-dot" x-show="connected"></div>
+        <div class="w-2 h-2 rounded-full bg-terminal-red" x-show="!connected"></div>
+        <span class="text-terminal-muted" x-text="connected ? 'Connected' : 'Disconnected'"></span>
+      </div>
+      <div class="hidden md:flex items-center gap-3">
+        <div class="flex items-center gap-1">
+          <i class="fa-solid fa-microchip text-terminal-blue text-xs"></i>
+          <span class="text-terminal-muted" x-text="sysInfo.cpu_percent ? sysInfo.cpu_percent.toFixed(0)+'%' : '--'"></span>
+        </div>
+        <div class="flex items-center gap-1">
+          <i class="fa-solid fa-memory text-terminal-cyan text-xs"></i>
+          <span class="text-terminal-muted" x-text="sysInfo.memory ? sysInfo.memory.percent.toFixed(0)+'%' : '--'"></span>
+        </div>
+        <div class="flex items-center gap-1">
+          <i class="fa-solid fa-hdd text-terminal-yellow text-xs"></i>
+          <span class="text-terminal-muted" x-text="sysInfo.disk ? sysInfo.disk.percent.toFixed(0)+'%' : '--'"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Actions -->
+    <div class="flex items-center gap-2">
+      <button @click="refreshTree()" class="px-2 py-1 text-xs rounded text-terminal-muted hover:text-terminal-text hover:bg-terminal-border transition-colors" title="Refresh">
+        <i class="fa-solid fa-rotate-right"></i>
+      </button>
+      <button @click="clearTerminal()" class="px-2 py-1 text-xs rounded text-terminal-muted hover:text-terminal-text hover:bg-terminal-border transition-colors" title="Clear terminal">
+        <i class="fa-solid fa-eraser"></i>
+      </button>
+      <button @click="showHelp=true" class="px-2 py-1 text-xs rounded text-terminal-muted hover:text-terminal-text hover:bg-terminal-border transition-colors" title="Help">
+        <i class="fa-solid fa-question-circle"></i>
+      </button>
+      <a href="https://github.com/jwalit-09/A7_OSSP_PROJECT" target="_blank" class="px-2 py-1 text-xs rounded text-terminal-muted hover:text-terminal-text hover:bg-terminal-border transition-colors">
+        <i class="fa-brands fa-github"></i>
+      </a>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════ MAIN LAYOUT ═══════════════════════════════════════ -->
+  <div class="flex" style="height: calc(100vh - 48px);">
+
+    <!-- ─── LEFT SIDEBAR: File Explorer ─── -->
+    <div class="flex flex-col border-r border-terminal-border" style="width:240px; min-width:200px; background:#11111b;">
+      <!-- Sidebar header -->
+      <div class="flex items-center justify-between px-3 py-2 border-b border-terminal-border">
+        <span class="text-xs font-bold text-terminal-muted uppercase tracking-widest">Explorer</span>
+        <div class="flex items-center gap-1">
+          <button @click="showNewFileModal=true" class="text-terminal-muted hover:text-terminal-text p-1 rounded transition-colors" title="New File">
+            <i class="fa-regular fa-file text-xs"></i>
+          </button>
+          <button @click="showNewFolderModal=true" class="text-terminal-muted hover:text-terminal-text p-1 rounded transition-colors" title="New Folder">
+            <i class="fa-regular fa-folder text-xs"></i>
+          </button>
+          <button @click="triggerUpload()" class="text-terminal-muted hover:text-terminal-text p-1 rounded transition-colors" title="Upload File">
+            <i class="fa-solid fa-upload text-xs"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Workspace label -->
+      <div class="px-3 py-1.5 flex items-center gap-2 text-xs text-terminal-muted select-none">
+        <i class="fa-solid fa-folder text-terminal-yellow"></i>
+        <span class="font-semibold text-terminal-text">WORKSPACE</span>
+      </div>
+
+      <!-- File tree -->
+      <div class="flex-1 overflow-y-auto py-1" id="file-tree">
+        <div x-show="loadingTree" class="px-4 py-2 text-xs text-terminal-muted">
+          <i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading...
+        </div>
+        <template x-if="fileTree && fileTree.children">
+          <div>
+            <template x-for="item in fileTree.children" :key="item.path || item.name">
+              <div x-data="{ open: false }">
+                <div class="file-item flex items-center gap-2 px-3 py-1 text-xs"
+                     :class="selectedFile === item.path ? 'selected' : ''"
+                     @click="handleFileClick(item)">
+                  <!-- Dir toggle arrow -->
+                  <i x-show="item.type==='dir'" class="fa-solid text-terminal-muted text-xs w-3"
+                     :class="open ? 'fa-chevron-down' : 'fa-chevron-right'"
+                     @click.stop="open=!open"></i>
+                  <span x-show="item.type!=='dir'" class="w-3"></span>
+                  <!-- Icon -->
+                  <i :class="getFileIcon(item)"></i>
+                  <span class="text-terminal-text truncate" x-text="item.name"></span>
+                  <!-- Size badge -->
+                  <span x-show="item.type==='file' && item.size !== undefined"
+                        class="ml-auto text-terminal-muted text-xs opacity-60"
+                        x-text="formatSize(item.size)"></span>
+                </div>
+                <!-- Nested children -->
+                <div x-show="open && item.children" class="pl-4">
+                  <template x-for="child in (item.children || [])" :key="child.path || child.name">
+                    <div class="file-item flex items-center gap-2 px-3 py-1 text-xs"
+                         :class="selectedFile === child.path ? 'selected' : ''"
+                         @click="handleFileClick(child)">
+                      <span class="w-3"></span>
+                      <i :class="getFileIcon(child)"></i>
+                      <span class="text-terminal-text truncate" x-text="child.name"></span>
+                      <span x-show="child.type==='file' && child.size !== undefined"
+                            class="ml-auto text-terminal-muted text-xs opacity-60"
+                            x-text="formatSize(child.size)"></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- Empty state -->
+        <div x-show="!loadingTree && (!fileTree || !fileTree.children || fileTree.children.length===0)"
+             class="px-4 py-8 text-center text-xs text-terminal-muted">
+          <i class="fa-regular fa-folder-open text-2xl mb-2 block"></i>
+          Empty workspace<br>
+          <span class="text-terminal-green">mkdir demo</span> to create a folder
+        </div>
+      </div>
+
+      <!-- Sidebar footer: workspace stats -->
+      <div class="border-t border-terminal-border px-3 py-2 text-xs text-terminal-muted">
+        <div class="flex justify-between">
+          <span x-text="'Files: ' + (sysInfo.workspace ? sysInfo.workspace.files : 0)"></span>
+          <span x-text="'Dirs: ' + (sysInfo.workspace ? sysInfo.workspace.directories : 0)"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── CENTER + RIGHT: Main content ─── -->
+    <div class="flex flex-col flex-1 overflow-hidden">
+
+      <!-- Tab bar -->
+      <div class="flex items-center border-b border-terminal-border" style="background:#181825; height:35px;">
+        <button class="px-4 h-full text-xs transition-colors"
+                :class="activeTab === 'terminal' ? 'tab-active' : 'tab-inactive'"
+                @click="activeTab='terminal'">
+          <i class="fa-solid fa-terminal mr-1.5"></i>Terminal
+        </button>
+        <button class="px-4 h-full text-xs transition-colors"
+                :class="activeTab === 'editor' ? 'tab-active' : 'tab-inactive'"
+                @click="activeTab='editor'">
+          <i class="fa-regular fa-file-code mr-1.5"></i>
+          <span x-text="openFile ? openFile.name : 'File Viewer'"></span>
+        </button>
+        <button class="px-4 h-full text-xs transition-colors"
+                :class="activeTab === 'history' ? 'tab-active' : 'tab-inactive'"
+                @click="activeTab='history'; loadHistory()">
+          <i class="fa-solid fa-clock-rotate-left mr-1.5"></i>History
+        </button>
+        <button class="px-4 h-full text-xs transition-colors"
+                :class="activeTab === 'sysinfo' ? 'tab-active' : 'tab-inactive'"
+                @click="activeTab='sysinfo'">
+          <i class="fa-solid fa-gauge mr-1.5"></i>System
+        </button>
+      </div>
+
+      <!-- ─── TERMINAL TAB ─── -->
+      <div x-show="activeTab==='terminal'" class="flex-1 flex flex-col overflow-hidden">
+        <!-- Output area -->
+        <div id="terminal-output" class="flex-1 overflow-y-auto p-4 terminal-output" style="background:#1e1e2e;">
+
+          <!-- Welcome banner -->
+          <div class="mb-4 text-terminal-accent">
+            <pre class="text-xs">
+  ____  _          _ _ _____
+ / ___|| |__   ___| | |  ___|__  _ __ __ _  ___
+ \___ \| '_ \ / _ \ | | |_ / _ \| '__/ _` |/ _ \
+  ___) | | | |  __/ | |  _| (_) | | | (_| |  __/
+ |____/|_| |_|\___|_|_|_|  \___/|_|  \__, |\___|
+                                       |___/      </pre>
+            <div class="text-terminal-green text-xs mt-1">File System Management Shell — OSSP Project A7</div>
+            <div class="text-terminal-muted text-xs mt-0.5">Type <span class="text-terminal-yellow">help</span> to see available commands, or just start typing!</div>
+          </div>
+
+          <!-- Output lines -->
+          <template x-for="(line, idx) in terminalOutput" :key="idx">
+            <div class="mb-1">
+              <div x-show="line.type==='prompt'" class="flex items-baseline gap-2">
+                <span class="output-prompt text-xs">shellforge</span>
+                <span class="text-terminal-blue text-xs">~/workspace</span>
+                <span class="text-terminal-accent text-xs">❯</span>
+                <span class="text-terminal-text text-xs" x-text="line.command"></span>
+              </div>
+              <div x-show="line.type==='stdout'" class="output-stdout pl-4 text-xs" x-html="line.content"></div>
+              <div x-show="line.type==='stderr'" class="output-stderr pl-4 text-xs" x-text="line.content"></div>
+              <div x-show="line.type==='info'" class="output-info pl-4 text-xs" x-text="line.content"></div>
+              <div x-show="line.type==='blocked'" class="output-blocked pl-4 text-xs" x-text="line.content"></div>
+              <div x-show="line.type==='success'" class="output-success pl-4 text-xs" x-text="line.content"></div>
+            </div>
+          </template>
+
+          <div id="terminal-bottom"></div>
+        </div>
+
+        <!-- Input area -->
+        <div class="flex items-center gap-2 px-4 py-2 border-t border-terminal-border" style="background:#181825;">
+          <span class="text-terminal-green text-xs font-bold whitespace-nowrap">shellforge ~/workspace ❯</span>
+          <input
+            type="text"
+            id="cmd-input"
+            class="cmd-input flex-1 bg-transparent text-terminal-text text-xs outline-none border border-transparent rounded px-2 py-1 transition-all"
+            placeholder="Type a command... (ls, mkdir, touch, cat, find, chmod...)"
+            x-model="currentCommand"
+            @keydown.enter="executeCommand()"
+            @keydown.up.prevent="navigateHistory(-1)"
+            @keydown.down.prevent="navigateHistory(1)"
+            @keydown.tab.prevent="autoComplete()"
+            :disabled="executing"
+          />
+          <button
+            @click="executeCommand()"
+            :disabled="executing || !currentCommand.trim()"
+            class="px-3 py-1 rounded text-xs font-bold transition-all"
+            :class="executing ? 'bg-terminal-border text-terminal-muted' : 'bg-terminal-accent text-terminal-bg hover:opacity-90'"
+          >
+            <i x-show="!executing" class="fa-solid fa-paper-plane text-xs"></i>
+            <i x-show="executing" class="fa-solid fa-spinner fa-spin text-xs"></i>
+          </button>
+        </div>
+
+        <!-- Quick command bar -->
+        <div class="flex items-center gap-1 px-4 py-1.5 border-t border-terminal-border overflow-x-auto" style="background:#11111b;">
+          <span class="text-terminal-muted text-xs whitespace-nowrap mr-2">Quick:</span>
+          <template x-for="qcmd in quickCommands" :key="qcmd.cmd">
+            <button
+              @click="runQuickCmd(qcmd.cmd)"
+              class="px-2 py-0.5 rounded text-xs border border-terminal-border text-terminal-muted hover:text-terminal-text hover:border-terminal-accent transition-all whitespace-nowrap"
+              x-text="qcmd.label">
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <!-- ─── FILE VIEWER TAB ─── -->
+      <div x-show="activeTab==='editor'" class="flex-1 flex flex-col overflow-hidden">
+        <div x-show="!openFile" class="flex-1 flex items-center justify-center text-terminal-muted text-sm">
+          <div class="text-center">
+            <i class="fa-regular fa-file-code text-4xl mb-3 block text-terminal-border"></i>
+            <div>Click a file in the explorer to view its contents</div>
+            <div class="text-xs mt-2 text-terminal-muted">Supports C, header, shell scripts, and text files</div>
+          </div>
+        </div>
+        <div x-show="openFile" class="flex-1 flex flex-col overflow-hidden">
+          <!-- File info bar -->
+          <div class="flex items-center justify-between px-4 py-2 border-b border-terminal-border text-xs" style="background:#181825;">
+            <div class="flex items-center gap-2">
+              <i :class="openFile ? getFileIcon(openFile) : ''"></i>
+              <span class="text-terminal-text font-semibold" x-text="openFile ? openFile.name : ''"></span>
+              <span class="text-terminal-muted" x-text="openFile ? '(' + formatSize(openFile.size) + ')' : ''"></span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button @click="downloadFile()" class="text-terminal-muted hover:text-terminal-text px-2 py-0.5 rounded border border-terminal-border transition-colors text-xs">
+                <i class="fa-solid fa-download mr-1"></i>Download
+              </button>
+              <button @click="openFile=null; fileContent=''" class="text-terminal-muted hover:text-terminal-red px-1 py-0.5 rounded transition-colors">
+                <i class="fa-solid fa-times"></i>
+              </button>
+            </div>
+          </div>
+          <!-- Content area with line numbers -->
+          <div class="flex-1 overflow-auto" style="background:#1e1e2e;">
+            <div class="flex">
+              <!-- Line numbers -->
+              <div class="select-none py-4 px-3 text-right text-terminal-muted text-xs leading-5 border-r border-terminal-border" style="min-width:48px; background:#181825;">
+                <template x-for="n in getLineNumbers()" :key="n">
+                  <div x-text="n" class="leading-5"></div>
+                </template>
+              </div>
+              <!-- Code content -->
+              <pre class="flex-1 p-4 text-xs leading-5 text-terminal-text overflow-x-auto" x-html="highlightedContent"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── HISTORY TAB ─── -->
+      <div x-show="activeTab==='history'" class="flex-1 overflow-y-auto p-4" style="background:#1e1e2e;">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-bold text-terminal-accent">Command History</h2>
+          <button @click="clearHistory()" class="text-xs text-terminal-red hover:opacity-80 border border-terminal-red rounded px-2 py-0.5 transition-colors">
+            <i class="fa-solid fa-trash mr-1"></i>Clear
+          </button>
+        </div>
+        <div x-show="cmdHistory.length === 0" class="text-center py-8 text-terminal-muted text-sm">
+          No commands in history yet
+        </div>
+        <template x-for="(item, idx) in [...cmdHistory].reverse()" :key="idx">
+          <div class="flex items-center gap-3 py-2 px-3 rounded mb-1 border border-terminal-border hover:border-terminal-accent transition-colors cursor-pointer"
+               @click="useHistoryCmd(item.command)" style="background:#181825;">
+            <span class="text-terminal-muted text-xs w-6 text-right" x-text="cmdHistory.length - idx"></span>
+            <span class="text-terminal-accent text-xs">❯</span>
+            <span class="text-terminal-text text-xs flex-1 font-mono" x-text="item.command"></span>
+            <span class="text-terminal-muted text-xs" x-text="formatTime(item.timestamp)"></span>
+          </div>
+        </template>
+      </div>
+
+      <!-- ─── SYSTEM INFO TAB ─── -->
+      <div x-show="activeTab==='sysinfo'" class="flex-1 overflow-y-auto p-4" style="background:#1e1e2e;">
+        <h2 class="text-sm font-bold text-terminal-accent mb-4">System Information</h2>
+
+        <!-- CPU / Memory / Disk cards -->
+        <div class="grid grid-cols-3 gap-4 mb-6">
+          <!-- CPU -->
+          <div class="rounded-lg p-4 border border-terminal-border" style="background:#181825;">
+            <div class="flex items-center gap-2 mb-3">
+              <i class="fa-solid fa-microchip text-terminal-blue"></i>
+              <span class="text-xs font-bold text-terminal-text">CPU Usage</span>
+            </div>
+            <div class="text-2xl font-bold text-terminal-blue mb-2" x-text="sysInfo.cpu_percent ? sysInfo.cpu_percent.toFixed(1)+'%' : '--'"></div>
+            <div class="w-full bg-terminal-border rounded-full h-1.5">
+              <div class="bg-terminal-blue progress-bar" :style="'width:' + (sysInfo.cpu_percent || 0) + '%'"></div>
+            </div>
+          </div>
+          <!-- Memory -->
+          <div class="rounded-lg p-4 border border-terminal-border" style="background:#181825;">
+            <div class="flex items-center gap-2 mb-3">
+              <i class="fa-solid fa-memory text-terminal-cyan"></i>
+              <span class="text-xs font-bold text-terminal-text">Memory</span>
+            </div>
+            <div class="text-2xl font-bold text-terminal-cyan mb-2" x-text="sysInfo.memory ? sysInfo.memory.percent.toFixed(1)+'%' : '--'"></div>
+            <div class="w-full bg-terminal-border rounded-full h-1.5">
+              <div class="bg-terminal-cyan progress-bar" :style="'width:' + (sysInfo.memory ? sysInfo.memory.percent : 0) + '%'"></div>
+            </div>
+            <div class="text-terminal-muted text-xs mt-1" x-text="sysInfo.memory ? formatBytes(sysInfo.memory.used) + ' / ' + formatBytes(sysInfo.memory.total) : ''"></div>
+          </div>
+          <!-- Disk -->
+          <div class="rounded-lg p-4 border border-terminal-border" style="background:#181825;">
+            <div class="flex items-center gap-2 mb-3">
+              <i class="fa-solid fa-hdd text-terminal-yellow"></i>
+              <span class="text-xs font-bold text-terminal-text">Disk</span>
+            </div>
+            <div class="text-2xl font-bold text-terminal-yellow mb-2" x-text="sysInfo.disk ? sysInfo.disk.percent.toFixed(1)+'%' : '--'"></div>
+            <div class="w-full bg-terminal-border rounded-full h-1.5">
+              <div class="bg-terminal-yellow progress-bar" :style="'width:' + (sysInfo.disk ? sysInfo.disk.percent : 0) + '%'"></div>
+            </div>
+            <div class="text-terminal-muted text-xs mt-1" x-text="sysInfo.disk ? formatBytes(sysInfo.disk.used) + ' / ' + formatBytes(sysInfo.disk.total) : ''"></div>
+          </div>
+        </div>
+
+        <!-- Features from PPT -->
+        <h3 class="text-xs font-bold text-terminal-muted uppercase tracking-widest mb-3">Project Features</h3>
+        <div class="grid grid-cols-2 gap-3 mb-6">
+          <template x-for="feature in projectFeatures" :key="feature.title">
+            <div class="rounded-lg p-3 border border-terminal-border" style="background:#181825;">
+              <div class="flex items-center gap-2 mb-1">
+                <i :class="feature.icon + ' text-sm'"></i>
+                <span class="text-xs font-bold text-terminal-text" x-text="feature.title"></span>
+              </div>
+              <div class="text-xs text-terminal-muted" x-text="feature.desc"></div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Quick workspace actions -->
+        <h3 class="text-xs font-bold text-terminal-muted uppercase tracking-widest mb-3">Workspace Info</h3>
+        <div class="rounded-lg p-3 border border-terminal-border text-xs" style="background:#181825;">
+          <div class="grid grid-cols-2 gap-2">
+            <div><span class="text-terminal-muted">Path:</span> <span class="text-terminal-text" x-text="sysInfo.workspace ? sysInfo.workspace.path : '--'"></span></div>
+            <div><span class="text-terminal-muted">Files:</span> <span class="text-terminal-text" x-text="sysInfo.workspace ? sysInfo.workspace.files : '--'"></span></div>
+            <div><span class="text-terminal-muted">Dirs:</span> <span class="text-terminal-text" x-text="sysInfo.workspace ? sysInfo.workspace.directories : '--'"></span></div>
+            <div><span class="text-terminal-muted">Uptime:</span> <span class="text-terminal-text" x-text="sysInfo.uptime ? formatUptime(sysInfo.uptime) : '--'"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════ MODALS ═════════════ -->
+
+  <!-- New File Modal -->
+  <div x-show="showNewFileModal" class="fixed inset-0 flex items-center justify-center z-50" style="background:rgba(0,0,0,0.7);">
+    <div class="rounded-xl border border-terminal-border p-6 w-80" style="background:#181825;">
+      <h3 class="text-sm font-bold text-terminal-accent mb-4"><i class="fa-regular fa-file mr-2"></i>New File</h3>
+      <input type="text" x-model="newFileName" class="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text outline-none focus:border-terminal-accent transition-colors mb-4" placeholder="filename.txt" @keydown.enter="createFile()" @keydown.escape="showNewFileModal=false" x-ref="newFileInput"/>
+      <div class="flex gap-2 justify-end">
+        <button @click="showNewFileModal=false" class="px-4 py-2 text-xs rounded border border-terminal-border text-terminal-muted hover:text-terminal-text transition-colors">Cancel</button>
+        <button @click="createFile()" class="px-4 py-2 text-xs rounded bg-terminal-accent text-terminal-bg font-bold hover:opacity-90 transition-opacity">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Folder Modal -->
+  <div x-show="showNewFolderModal" class="fixed inset-0 flex items-center justify-center z-50" style="background:rgba(0,0,0,0.7);">
+    <div class="rounded-xl border border-terminal-border p-6 w-80" style="background:#181825;">
+      <h3 class="text-sm font-bold text-terminal-accent mb-4"><i class="fa-regular fa-folder mr-2"></i>New Folder</h3>
+      <input type="text" x-model="newFolderName" class="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text outline-none focus:border-terminal-accent transition-colors mb-4" placeholder="folder-name" @keydown.enter="createFolder()" @keydown.escape="showNewFolderModal=false"/>
+      <div class="flex gap-2 justify-end">
+        <button @click="showNewFolderModal=false" class="px-4 py-2 text-xs rounded border border-terminal-border text-terminal-muted hover:text-terminal-text transition-colors">Cancel</button>
+        <button @click="createFolder()" class="px-4 py-2 text-xs rounded bg-terminal-accent text-terminal-bg font-bold hover:opacity-90 transition-opacity">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help Modal -->
+  <div x-show="showHelp" class="fixed inset-0 flex items-center justify-center z-50" style="background:rgba(0,0,0,0.7);">
+    <div class="rounded-xl border border-terminal-border p-6 w-[560px] max-h-[80vh] overflow-y-auto" style="background:#181825;">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-bold text-terminal-accent"><i class="fa-solid fa-terminal mr-2"></i>ShellForge Commands</h3>
+        <button @click="showHelp=false" class="text-terminal-muted hover:text-terminal-red"><i class="fa-solid fa-times"></i></button>
+      </div>
+      <div class="space-y-4">
+        <template x-for="cat in helpCategories" :key="cat.title">
+          <div>
+            <h4 class="text-xs font-bold text-terminal-yellow uppercase tracking-widest mb-2" x-text="cat.title"></h4>
+            <div class="space-y-1">
+              <template x-for="cmd in cat.commands" :key="cmd.cmd">
+                <div class="flex gap-3 py-1 border-b border-terminal-border">
+                  <code class="text-terminal-accent text-xs w-40 shrink-0" x-text="cmd.cmd"></code>
+                  <span class="text-terminal-muted text-xs" x-text="cmd.desc"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- About Modal -->
+  <div x-show="showAbout" class="fixed inset-0 flex items-center justify-center z-50" style="background:rgba(0,0,0,0.7);">
+    <div class="rounded-xl border border-terminal-border p-6 w-96" style="background:#181825;">
+      <div class="text-center mb-4">
+        <i class="fa-solid fa-terminal text-terminal-accent text-3xl mb-3 block"></i>
+        <h3 class="text-lg font-bold text-terminal-accent">ShellForge</h3>
+        <p class="text-terminal-muted text-xs mt-1">File System Management Shell — OSSP Project A7</p>
+      </div>
+      <div class="text-xs text-terminal-muted space-y-1 mb-4">
+        <div>🎓 <strong class="text-terminal-text">Course:</strong> Operating Systems / OSSP</div>
+        <div>👥 <strong class="text-terminal-text">Team:</strong> A7</div>
+        <div>🔧 <strong class="text-terminal-text">Core:</strong> C/C++, Linux, POSIX System Calls</div>
+        <div>🌐 <strong class="text-terminal-text">Web UI:</strong> Python Flask + Alpine.js + TailwindCSS</div>
+        <div>📦 <strong class="text-terminal-text">GitHub:</strong> <a href="https://github.com/jwalit-09/A7_OSSP_PROJECT" class="text-terminal-blue hover:underline" target="_blank">jwalit-09/A7_OSSP_PROJECT</a></div>
+      </div>
+      <button @click="showAbout=false" class="w-full px-4 py-2 text-xs rounded bg-terminal-accent text-terminal-bg font-bold hover:opacity-90 transition-opacity">Close</button>
+    </div>
+  </div>
+
+  <!-- Toast notifications -->
+  <div class="fixed bottom-4 right-4 z-50 space-y-2">
+    <template x-for="(toast, idx) in toasts" :key="toast.id">
+      <div class="toast flex items-center gap-3 px-4 py-3 rounded-lg border text-xs"
+           :class="toast.type==='success' ? 'border-terminal-green bg-terminal-bg text-terminal-green' : 'border-terminal-red bg-terminal-bg text-terminal-red'">
+        <i :class="toast.type==='success' ? 'fa-solid fa-check-circle' : 'fa-solid fa-exclamation-circle'"></i>
+        <span x-text="toast.message"></span>
+      </div>
+    </template>
+  </div>
+
+  <!-- Hidden file input -->
+  <input type="file" id="file-upload-input" class="hidden" @change="handleFileUpload($event)"/>
+
+  <!-- ═════════════ ALPINE.JS APPLICATION ═════════════ -->
+  <script>
+  const API = 'http://localhost:5000/api';
+
+  function shellforgeApp() {
+    return {
+      // State
+      connected: false,
+      socket: null,
+      activeTab: 'terminal',
+      currentCommand: '',
+      executing: false,
+      terminalOutput: [],
+      cmdHistory: [],
+      historyIndex: -1,
+      currentPath: 'workspace',
+      fileTree: null,
+      loadingTree: false,
+      selectedFile: null,
+      openFile: null,
+      fileContent: '',
+      highlightedContent: '',
+      sysInfo: {},
+      toasts: [],
+      toastId: 0,
+
+      // Modals
+      showNewFileModal: false,
+      showNewFolderModal: false,
+      showHelp: false,
+      showAbout: false,
+      newFileName: '',
+      newFolderName: '',
+
+      // Quick commands
+      quickCommands: [
+        { label: 'ls -la', cmd: 'ls -la' },
+        { label: 'pwd', cmd: 'pwd' },
+        { label: 'find .',  cmd: 'find . -maxdepth 2' },
+        { label: 'df -h', cmd: 'df -h' },
+        { label: 'du -sh .', cmd: 'du -sh .' },
+        { label: 'date', cmd: 'date' },
+        { label: 'whoami', cmd: 'whoami' },
+        { label: 'uname -a', cmd: 'uname -a' },
+      ],
+
+      projectFeatures: [
+        { title: 'File Management', icon: 'fa-solid fa-file-pen text-terminal-blue', desc: 'Create, copy, move, delete, and modify files via CLI' },
+        { title: 'Directory Ops', icon: 'fa-solid fa-folder-tree text-terminal-yellow', desc: 'Navigate, organize, and recursively manage directories' },
+        { title: 'File Searching', icon: 'fa-solid fa-magnifying-glass text-terminal-cyan', desc: 'Find files by name, pattern, or properties with find/grep' },
+        { title: 'Permissions', icon: 'fa-solid fa-shield text-terminal-green', desc: 'Manage file permissions with chmod and inspect with stat' },
+        { title: 'I/O Redirection', icon: 'fa-solid fa-right-left text-terminal-accent', desc: 'Stdin/stdout/stderr redirection and pipe management' },
+        { title: 'Pipes & IPC', icon: 'fa-solid fa-pipe text-terminal-red', desc: 'Anonymous pipes for process-to-process communication' },
+        { title: 'Process Control', icon: 'fa-solid fa-gears text-terminal-muted', desc: 'fork(), execvp(), waitpid(), signal handling' },
+        { title: 'Memory Safety', icon: 'fa-solid fa-shield-halved text-terminal-yellow', desc: 'Valgrind, ASan, and GDB integration for debugging' },
+      ],
+
+      helpCategories: [
+        {
+          title: 'File Operations',
+          commands: [
+            { cmd: 'ls -la', desc: 'List files with details and hidden files' },
+            { cmd: 'touch file.txt', desc: 'Create empty file' },
+            { cmd: 'cat file.txt', desc: 'Display file contents' },
+            { cmd: 'cp src dst', desc: 'Copy file or directory (-r for recursive)' },
+            { cmd: 'mv src dst', desc: 'Move or rename file/directory' },
+            { cmd: 'rm file', desc: 'Remove file (-r for directory)' },
+            { cmd: 'head -n 5 file', desc: 'Show first 5 lines' },
+            { cmd: 'tail -n 5 file', desc: 'Show last 5 lines' },
+          ]
+        },
+        {
+          title: 'Directory Operations',
+          commands: [
+            { cmd: 'mkdir dirname', desc: 'Create directory' },
+            { cmd: 'ls -R', desc: 'Recursive directory listing' },
+            { cmd: 'du -sh .', desc: 'Directory size summary' },
+            { cmd: 'find . -name "*.c"', desc: 'Find C files recursively' },
+          ]
+        },
+        {
+          title: 'Permissions & Metadata',
+          commands: [
+            { cmd: 'chmod 644 file', desc: 'Set file permissions' },
+            { cmd: 'stat file', desc: 'Show file inode metadata' },
+            { cmd: 'ls -li', desc: 'Show inode numbers' },
+            { cmd: 'wc -l file', desc: 'Count lines in file' },
+          ]
+        },
+        {
+          title: 'Search & Filter',
+          commands: [
+            { cmd: 'grep pattern file', desc: 'Search for pattern in file' },
+            { cmd: 'find . -type f', desc: 'Find all regular files' },
+            { cmd: 'sort file', desc: 'Sort file contents' },
+            { cmd: 'diff file1 file2', desc: 'Compare two files' },
+          ]
+        },
+        {
+          title: 'Text Processing',
+          commands: [
+            { cmd: 'echo "text" > file', desc: 'Write text to file (redirect)' },
+            { cmd: 'echo "text" >> file', desc: 'Append text to file' },
+            { cmd: 'cat f1 f2 > merged', desc: 'Concatenate files' },
+            { cmd: 'wc -w file', desc: 'Count words in file' },
+          ]
+        },
+      ],
+
+      // ─── Init ───
+      async init() {
+        this.addOutput('info', '🔌 Connecting to ShellForge backend...');
+        this.connectSocket();
+        await this.loadSysInfo();
+        await this.refreshTree();
+        await this.loadHistory();
+        // Poll system info every 5s
+        setInterval(() => this.loadSysInfo(), 5000);
+        // Focus input
+        setTimeout(() => document.getElementById('cmd-input')?.focus(), 100);
+      },
+
+      // ─── Socket.IO ───
+      connectSocket() {
+        try {
+          this.socket = io('http://localhost:5000', {
+            transports: ['websocket', 'polling'],
+            timeout: 5000,
+          });
+
+          this.socket.on('connect', () => {
+            this.connected = true;
+            this.addOutput('success', '✅ Connected to ShellForge backend (http://localhost:5000)');
+            this.addOutput('info', '📁 Workspace: /tmp/shellforge_workspace');
+            this.addOutput('info', '💡 Type "help" to see available commands or click Quick buttons below');
+          });
+
+          this.socket.on('disconnect', () => {
+            this.connected = false;
+            this.addOutput('stderr', '⚠ Disconnected from backend. Is the server running?');
+          });
+
+          this.socket.on('command_result', (data) => {
+            this.handleCommandResult(data);
+          });
+        } catch (e) {
+          this.connected = false;
+          this.addOutput('stderr', '❌ Could not connect to backend. Run: cd web/backend && python app.py');
+        }
+      },
+
+      // ─── Execute Command ───
+      async executeCommand() {
+        const cmd = this.currentCommand.trim();
+        if (!cmd || this.executing) return;
+
+        this.addOutput('prompt', null, cmd);
+        this.historyIndex = -1;
+        this.executing = true;
+        const prevCmd = this.currentCommand;
+        this.currentCommand = '';
+
+        // Handle built-in UI commands
+        if (cmd === 'clear' || cmd === 'cls') {
+          this.terminalOutput = [];
+          this.executing = false;
+          return;
+        }
+        if (cmd === 'help') {
+          this.showHelp = true;
+          this.addOutput('info', 'Opening help panel...');
+          this.executing = false;
+          return;
+        }
+
+        try {
+          const resp = await fetch(`${API}/execute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: cmd }),
+          });
+
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const data = await resp.json();
+          this.handleCommandResult(data);
+
+          // Refresh tree after file-modifying commands
+          const modCmds = ['mkdir','touch','rm','cp','mv','chmod','echo','cat'];
+          if (modCmds.some(m => cmd.startsWith(m))) {
+            setTimeout(() => this.refreshTree(), 300);
+          }
+        } catch (e) {
+          this.addOutput('stderr', `❌ Network error: ${e.message}\nMake sure backend is running: python web/backend/app.py`);
+        } finally {
+          this.executing = false;
+          this.$nextTick(() => {
+            document.getElementById('cmd-input')?.focus();
+            this.scrollTerminal();
+          });
+        }
+      },
+
+      handleCommandResult(data) {
+        if (data.blocked) {
+          this.addOutput('blocked', data.stderr);
+          return;
+        }
+        if (data.stdout) {
+          this.addOutput('stdout', this.escapeHtml(data.stdout));
+        }
+        if (data.stderr) {
+          this.addOutput('stderr', data.stderr);
+        }
+        if (data.exit_code === 0 && !data.stdout && !data.stderr) {
+          this.addOutput('success', '✓ Done');
+        }
+        if (data.duration_ms) {
+          this.addOutput('info', `⏱ ${data.duration_ms}ms  exit:${data.exit_code}`);
+        }
+      },
+
+      runQuickCmd(cmd) {
+        this.currentCommand = cmd;
+        this.executeCommand();
+      },
+
+      // ─── Terminal helpers ───
+      addOutput(type, content, command = null) {
+        this.terminalOutput.push({ type, content, command });
+        if (this.terminalOutput.length > 2000) this.terminalOutput.splice(0, 500);
+        this.$nextTick(() => this.scrollTerminal());
+      },
+
+      scrollTerminal() {
+        const el = document.getElementById('terminal-bottom');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      },
+
+      clearTerminal() {
+        this.terminalOutput = [];
+        this.addOutput('info', '🧹 Terminal cleared. Type a command to begin.');
+      },
+
+      navigateHistory(dir) {
+        if (this.cmdHistory.length === 0) return;
+        this.historyIndex = Math.max(-1, Math.min(this.cmdHistory.length - 1, this.historyIndex + dir));
+        if (this.historyIndex === -1) {
+          this.currentCommand = '';
+        } else {
+          this.currentCommand = this.cmdHistory[this.cmdHistory.length - 1 - this.historyIndex]?.command || '';
+        }
+      },
+
+      autoComplete() {
+        const suggestions = this.quickCommands.filter(q => q.cmd.startsWith(this.currentCommand));
+        if (suggestions.length === 1) this.currentCommand = suggestions[0].cmd;
+      },
+
+      escapeHtml(text) {
+        return text
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br>');
+      },
+
+      // ─── File Tree ───
+      async refreshTree() {
+        this.loadingTree = true;
+        try {
+          const resp = await fetch(`${API}/files/tree`);
+          if (resp.ok) this.fileTree = await resp.json();
+        } catch (e) {
+          // backend not available
+        } finally {
+          this.loadingTree = false;
+        }
+      },
+
+      async handleFileClick(item) {
+        this.selectedFile = item.path;
+        if (item.type === 'file') {
+          await this.readFile(item);
+          this.activeTab = 'editor';
+        }
+      },
+
+      async readFile(item) {
+        try {
+          const resp = await fetch(`${API}/files/read?path=${encodeURIComponent(item.path)}`);
+          if (!resp.ok) {
+            this.showToast('Cannot read file: ' + (await resp.json()).error, 'error');
+            return;
+          }
+          const data = await resp.json();
+          this.openFile = { ...item, name: item.name || item.path.split('/').pop() };
+          this.fileContent = data.content;
+          this.highlightedContent = this.highlightCode(data.content, item.name);
+        } catch (e) {
+          this.showToast('Error reading file', 'error');
+        }
+      },
+
+      getLineNumbers() {
+        if (!this.fileContent) return [];
+        return Array.from({ length: this.fileContent.split('\n').length }, (_, i) => i + 1);
+      },
+
+      // ─── Syntax highlighting (simple) ───
+      highlightCode(code, filename) {
+        const ext = (filename || '').split('.').pop().toLowerCase();
+        let escaped = code
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+
+        if (['c', 'h', 'cpp', 'cc'].includes(ext)) {
+          return escaped
+            .replace(/(\/\*[\s\S]*?\*\/|\/\/[^\n]*)/g, '<span class="cm">$1</span>')
+            .replace(/("(?:[^"\\]|\\.)*")/g, '<span class="str">$1</span>')
+            .replace(/\b(int|char|void|return|if|else|for|while|do|switch|case|break|continue|struct|typedef|static|const|extern|include|define|sizeof|NULL|true|false|main)\b/g, '<span class="kw">$1</span>')
+            .replace(/#(include|define|ifndef|ifdef|endif|pragma)/g, '<span class="pp">#$1</span>')
+            .replace(/\b(\d+)\b/g, '<span class="num">$1</span>');
+        }
+        if (ext === 'sh' || ext === 'bash') {
+          return escaped
+            .replace(/(#[^\n]*)/g, '<span class="cm">$1</span>')
+            .replace(/\b(if|then|else|fi|for|while|do|done|echo|exit|cd|ls|cat)\b/g, '<span class="kw">$1</span>')
+            .replace(/("(?:[^"\\]|\\.)*")/g, '<span class="str">$1</span>');
+        }
+        return escaped;
+      },
+
+      downloadFile() {
+        if (!this.openFile) return;
+        window.open(`${API}/files/download?path=${encodeURIComponent(this.openFile.path)}`, '_blank');
+      },
+
+      // ─── File CRUD ───
+      async createFile() {
+        if (!this.newFileName.trim()) return;
+        try {
+          const resp = await fetch(`${API}/files/create`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: this.newFileName }),
+          });
+          const data = await resp.json();
+          if (data.success) {
+            this.showToast(`Created: ${this.newFileName}`, 'success');
+            this.addOutput('success', `✅ Created file: ${this.newFileName}`);
+            await this.refreshTree();
+          } else {
+            this.showToast(data.error || 'Error', 'error');
+          }
+        } catch (e) {
+          this.showToast('Network error', 'error');
+        } finally {
+          this.showNewFileModal = false;
+          this.newFileName = '';
+        }
+      },
+
+      async createFolder() {
+        if (!this.newFolderName.trim()) return;
+        try {
+          const resp = await fetch(`${API}/files/mkdir`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: this.newFolderName }),
+          });
+          const data = await resp.json();
+          if (data.success) {
+            this.showToast(`Created: ${this.newFolderName}`, 'success');
+            this.addOutput('success', `✅ Created folder: ${this.newFolderName}`);
+            await this.refreshTree();
+          } else {
+            this.showToast(data.error || 'Error', 'error');
+          }
+        } catch (e) {
+          this.showToast('Network error', 'error');
+        } finally {
+          this.showNewFolderModal = false;
+          this.newFolderName = '';
+        }
+      },
+
+      triggerUpload() {
+        document.getElementById('file-upload-input').click();
+      },
+
+      async handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('path', '');
+        try {
+          const resp = await fetch(`${API}/files/upload`, { method: 'POST', body: formData });
+          const data = await resp.json();
+          if (data.success) {
+            this.showToast(`Uploaded: ${file.name}`, 'success');
+            this.addOutput('success', `✅ Uploaded: ${file.name} (${this.formatSize(data.size)})`);
+            await this.refreshTree();
+          } else {
+            this.showToast(data.error || 'Upload failed', 'error');
+          }
+        } catch (e) {
+          this.showToast('Upload error', 'error');
+        }
+        event.target.value = '';
+      },
+
+      // ─── System Info ───
+      async loadSysInfo() {
+        try {
+          const resp = await fetch(`${API}/system/info`);
+          if (resp.ok) this.sysInfo = await resp.json();
+        } catch (e) { /* backend not running */ }
+      },
+
+      // ─── History ───
+      async loadHistory() {
+        try {
+          const resp = await fetch(`${API}/history?limit=100`);
+          if (resp.ok) {
+            const data = await resp.json();
+            this.cmdHistory = data.history || [];
+          }
+        } catch (e) {}
+      },
+
+      async clearHistory() {
+        try {
+          await fetch(`${API}/history/clear`, { method: 'DELETE' });
+          this.cmdHistory = [];
+          this.showToast('History cleared', 'success');
+        } catch (e) {}
+      },
+
+      useHistoryCmd(cmd) {
+        this.currentCommand = cmd;
+        this.activeTab = 'terminal';
+        this.$nextTick(() => document.getElementById('cmd-input')?.focus());
+      },
+
+      // ─── Helpers ───
+      getFileIcon(item) {
+        if (!item) return 'fa-regular fa-file icon-file';
+        if (item.type === 'dir' || item.type === 'directory') return 'fa-solid fa-folder icon-dir';
+        const ext = (item.name || '').split('.').pop().toLowerCase();
+        const iconMap = {
+          c: 'fa-regular fa-file-code icon-c',
+          h: 'fa-regular fa-file-code icon-h',
+          cpp: 'fa-regular fa-file-code icon-c',
+          sh: 'fa-solid fa-file-code icon-sh',
+          bash: 'fa-solid fa-file-code icon-sh',
+          md: 'fa-brands fa-markdown icon-md',
+          txt: 'fa-regular fa-file-lines icon-txt',
+          json: 'fa-regular fa-file-code icon-h',
+          py: 'fa-brands fa-python icon-sh',
+          html: 'fa-brands fa-html5 icon-c',
+          css: 'fa-brands fa-css3 icon-h',
+          js: 'fa-brands fa-js icon-sh',
+          gitignore: 'fa-brands fa-git icon-c',
+          makefile: 'fa-solid fa-cog icon-h',
+        };
+        return iconMap[ext] || iconMap[(item.name || '').toLowerCase()] || 'fa-regular fa-file icon-file';
+      },
+
+      formatSize(bytes) {
+        if (bytes === undefined || bytes === null) return '';
+        if (bytes < 1024) return bytes + 'B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'K';
+        return (bytes / (1024 * 1024)).toFixed(1) + 'M';
+      },
+
+      formatBytes(bytes) {
+        if (!bytes) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(1024));
+        return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
+      },
+
+      formatTime(ts) {
+        if (!ts) return '';
+        const d = new Date(ts);
+        return d.toLocaleTimeString();
+      },
+
+      formatUptime(seconds) {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        return `${h}h ${m}m`;
+      },
+
+      showToast(message, type = 'success') {
+        const id = ++this.toastId;
+        this.toasts.push({ id, message, type });
+        setTimeout(() => {
+          this.toasts = this.toasts.filter(t => t.id !== id);
+        }, 3500);
+      },
+    };
+  }
+  </script>
+</body>
+</html>

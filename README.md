@@ -1,211 +1,258 @@
-# ShellForge — Unix Shell & File System Management
-### Operating Systems and Systems Programming (OSSP) — Complete Project (Weeks 1 to 10 in One Nutshell)
+# ShellForge — File System Management Shell
 
-ShellForge is a complete Unix-like command-line shell developed in C for Linux/Ubuntu. It integrates all 10 weekly milestones of Operating Systems & Systems Programming along with full POSIX File System Management into a single, cohesive, modular codebase.
-
----
-
-## 🏛️ System Architecture
-
-```text
-                                User Input
-                                     │
-                                     ▼
-                            +-----------------+
-                            |    Tokenizer    | (strtok / dynamic argv[])
-                            +-----------------+
-                                     │
-                 +-------------------+-------------------+
-                 │                                       │
-                 ▼                                       ▼
-        [Pipeline Stage '|']                    [Redirection '>', '>>', '<', '2>']
-        (pipe() + dup2())                       (open() + dup2())
-                 │                                       │
-                 +-------------------+-------------------+
-                                     │
-                 +-------------------+-------------------+
-                 │                                       │
-                 ▼                                       ▼
-        [Built-in Commands]                     [External Programs]
-        (Executed in Parent Shell)              (fork() + execvp() + waitpid())
-        • cd, pwd, env, help, exit              • /bin/ls, grep, wc, sleep, etc.
-        • touch, mkdir, rmdir, cat
-        • cp (-r), mv, rm (-r), ls (-l, -R)
-        • find, stat, chmod, chown
-                 │                                       │
-                 +-------------------+-------------------+
-                                     │
-                                     ▼
-                             Linux POSIX Kernel
-                                     │
-                                     ▼
-                      CPU • Memory • File System • IPC
-```
+> **OSSP Project A7** — A Unix shell and browser-based file manager demonstrating POSIX system calls, process management, file permissions, and secure inter-process communication.
 
 ---
 
-## 📚 All Weeks in One Nutshell (Curriculum Overview)
+## Architecture
 
-All 10 modules are fully integrated into the codebase:
+```
+React Frontend (Vite + Tailwind)
+          │
+          │  HTTP REST  (Vite proxy)
+          ▼
+Express REST API  (Node.js)
+          │
+          │  JSON stdin/stdout  (execve, no shell)
+          ▼
+C Adapter  (shellforge_adapter.c)
+          │
+          │  POSIX syscalls: open, read, write, stat,
+          │  mkdir, unlink, rename, opendir, readdir,
+          │  chmod, lstat, realpath
+          ▼
+Ubuntu / Linux File System
+```
 
-| Milestone | Topic | Core System Calls & Functions | Where in Code |
-|---|---|---|---|
-| **Week 1** | **Interactive REPL Loop** | `fgets()`, `printf()`, `strcmp()` | `src/main.c` |
-| **Week 2** | **Dynamic Memory Model** | `malloc()`, `realloc()`, `free()` | `src/input.c`, `include/input.h` |
-| **Week 3** | **Command Parsing & Lexical Analysis** | `strtok()`, dynamic `argv[]` vector | `src/parser.c`, `include/parser.h` |
-| **Week 4** | **Process Lifecycle & Execution** | `fork()`, `execvp()`, `waitpid()` | `src/process.c`, `include/process.h` |
-| **Week 5** | **Built-in Commands & Environment** | `chdir()`, `getcwd()`, `getenv()` | `src/builtin.c`, `include/builtin.h` |
-| **Week 6** | **Signals & Process Control** | `signal()`, `SIGINT`, `SIGCHLD`, `WNOHANG` | `src/signals.c`, `include/signals.h` |
-| **Week 7** | **Pipes & Inter-Process Communication** | `pipe()`, `dup2()`, `close()` | `src/pipes.c`, `include/pipes.h` |
-| **Week 8** | **Memory Safety & Debugging** | Valgrind, GDB, AddressSanitizer (`-fsanitize=address`) | `Makefile` (`make asan`) |
-| **Week 9** | **File Descriptors & Redirection** | `open()` (`O_CREAT`, `O_TRUNC`, `O_APPEND`), `dup2()` | `src/redirect.c`, `include/redirect.h` |
-| **Week 10** | **POSIX Threads & Concurrency** | `pthread_create()`, `pthread_detach()` | `src/thread.c`, `include/thread.h` |
-| **File System** | **File Operations, Search, Permissions** | `stat()`, `chmod()`, `chown()`, `opendir()`, `readdir()`, `unlink()`, `rename()` | `src/fileops.c`, `src/search.c`, `src/perms.c` |
+The C adapter reuses the same POSIX system calls as the ShellForge shell (`src/fileops.c`, `src/perms.c`, `src/search.c`). The Node.js layer only validates HTTP shapes and spawns the adapter — it never touches the filesystem directly. The React frontend calls the REST API and never executes shell commands.
 
 ---
 
-## 📁 Repository Structure
+## OSSP Learning Objectives
 
-```text
-.
-├── Makefile                # Unified build system with -pthread and -fsanitize=address
-├── README.md               # Complete project documentation
-├── .gitignore              # Ignores build artifacts and binaries
-│
-├── include/                # Header definitions
-│   ├── shell.h             # Core constants and version
-│   ├── input.h             # Dynamic line reading
-│   ├── parser.h            # Tokenization declarations
-│   ├── process.h           # fork / execvp / waitpid definitions
-│   ├── builtin.h           # Built-in command dispatcher
-│   ├── signals.h           # SIGINT & SIGCHLD signal handlers
-│   ├── pipes.h             # Anonymous pipe IPC declarations
-│   ├── redirect.h          # I/O redirection declarations
-│   ├── thread.h            # POSIX background monitor thread
-│   ├── fileops.h           # File operations (touch, mkdir, rmdir, cat, cp, mv, rm, ls)
-│   ├── search.h            # Recursive walker & find tool
-│   └── perms.h             # Permissions (ls -l, stat, chmod, chown)
-│
-├── src/                    # Source implementations
-│   ├── main.c              # REPL loop, prompt, and master execution dispatcher
-│   ├── input.c             # Dynamic buffer input management
-│   ├── parser.c            # Tokenizer and argv[] builder
-│   ├── process.c           # Child process execution
-│   ├── builtin.c           # Shell built-in command handlers
-│   ├── signals.c           # Signal handlers (Ctrl+C and zombie reaping)
-│   ├── pipes.c             # Two-stage pipeline execution
-│   ├── redirect.c          # >, >>, <, 2> stream redirection
-│   ├── thread.c            # POSIX thread background worker
-│   ├── fileops.c           # Low-level file system operations via system calls
-│   ├── search.c            # Directory recursion, find, and tree walking
-│   └── perms.c             # Inode permissions and metadata formatting
-│
-├── tests/
-│   └── run_tests.sh        # Automated end-to-end test suite
-└── bin/                    # Output directory for compiled binaries
-```
-
----
-
-## ⚡ Build and Run Instructions
-
-### 1. Compile the Shell
-```bash
-make clean
-make
-```
-
-### 2. Run ShellForge
-```bash
-make run
-```
-*or directly:*
-```bash
-./bin/shellforge
-```
-
-### 3. Run with AddressSanitizer (Memory Debugging)
-```bash
-make asan
-./bin/shellforge
-```
-
-### 4. Run the Automated Test Suite
-```bash
-./tests/run_tests.sh
-```
-
----
-
-## 🧪 Demonstration & Test Commands
-
-Inside the `myshell>` prompt, you can run all commands across all weeks:
-
-```text
-# 1. Built-in & Environment Commands (Week 5)
-pwd
-cd ..
-pwd
-env
-help
-
-# 2. Dynamic Input & External Programs (Weeks 2, 4)
-ls
-date
-whoami
-
-# 3. File Operations (System Calls)
-mkdir demo
-touch demo/sample.txt
-cat demo/sample.txt
-
-# 4. Stream Redirection (Week 9)
-echo "Operating Systems PBL" > demo/sample.txt
-cat < demo/sample.txt
-echo "Second Line" >> demo/sample.txt
-cat demo/sample.txt
-
-# 5. Anonymous Pipelines (Week 7)
-ls | wc
-cat demo/sample.txt | grep Operating
-
-# 6. Permissions & Metadata
-ls -l demo
-stat demo/sample.txt
-chmod 644 demo/sample.txt
-
-# 7. Recursive Operations & Search
-cp -r demo demo_backup
-find demo -name "*.txt"
-ls -R demo
-rm -r demo demo_backup
-
-# 8. Signals (Week 6)
-sleep 20          # Press Ctrl+C — the shell stays active!
-
-# 9. Concurrency & Monitoring (Week 10)
-# Notice [Monitor] ShellForge Running... prints every 10 seconds in the background!
-
-# 10. Exit (Week 1)
-exit
-```
-
----
-
-## 🛡️ Key System Calls Reference
-
-| System Call | Purpose in ShellForge |
+| Concept | Demonstrated In |
 |---|---|
-| `fork()` | Creates child process for external commands and pipeline stages |
-| `execvp()` | Replaces child process image with the target executable |
-| `waitpid()` | Synchronizes parent shell and reaps background zombies non-blockingly |
-| `pipe()` | Creates kernel IPC buffer for process-to-process streaming |
-| `dup2()` | Duplicates file descriptors to redirect stdin, stdout, and stderr |
-| `open()` | Opens and creates files with `O_CREAT`, `O_TRUNC`, `O_APPEND` |
-| `read()` / `write()` | Low-level file descriptor I/O used in `cat` and `cp` |
-| `stat()` / `lstat()` | Inode metadata extraction for permissions, size, and timestamps |
-| `opendir()` / `readdir()` | Directory stream reading and recursive tree traversal |
-| `chmod()` / `chown()` | Modifies file permission bits and ownership |
-| `unlink()` / `rmdir()` | Deletes files and directories |
-| `signal()` | Traps `SIGINT` (<kbd>Ctrl</kbd>+<kbd>C</kbd>) and `SIGCHLD` |
-| `pthread_create()` | Spawns asynchronous background monitoring thread |
+| POSIX file I/O (`open`, `read`, `write`) | `src/fileops.c`, `backend/shellforge_adapter.c` |
+| Directory traversal (`opendir`, `readdir`) | `src/fileops.c`, `src/search.c` |
+| File metadata (`stat`, `lstat`) | `src/perms.c`, `backend/shellforge_adapter.c` |
+| Permissions (`chmod`, mode bits) | `src/perms.c`, Permissions modal |
+| Process creation (`fork`, `exec`) | `src/process.c`, `src/pipes.c` |
+| Signal handling | `src/signals.c` |
+| Pipes / IPC | `src/pipes.c` — JSON protocol between Node.js & C adapter |
+| I/O redirection | `src/redirect.c` |
+| Thread monitoring | `src/thread.c` |
+| Memory safety | `src/input.c` — dynamic buffer growth |
+| Path security | `safe_resolve()` in `shellforge_adapter.c` |
+
+---
+
+## Technology Stack
+
+| Layer | Technology |
+|---|---|
+| Shell Core | C / POSIX (gcc, pthreads) |
+| C–Node Bridge | `shellforge_adapter.c` — JSON stdin/stdout |
+| Backend API | Node.js 20 + Express 4 |
+| Frontend | React 18 + Vite 5 |
+| Styling | Tailwind CSS 3 |
+| Icons | Lucide React |
+
+---
+
+## Project Structure
+
+```
+A7_OSSP_PROJECT/
+├── src/                    ← ShellForge C source (unchanged)
+│   ├── main.c              ← REPL loop
+│   ├── fileops.c           ← touch, mkdir, cp, mv, rm, ls
+│   ├── perms.c             ← stat, chmod, chown, ls -l
+│   ├── search.c            ← find, recursive_rm, recursive_cp
+│   ├── pipes.c             ← pipe() + dup2()
+│   ├── redirect.c          ← >, >>, <, 2>
+│   ├── process.c           ← fork, execvp, waitpid
+│   ├── signals.c           ← SIGINT, SIGCHLD
+│   ├── thread.c            ← pthread monitor
+│   ├── input.c             ← dynamic line input
+│   ├── parser.c            ← tokenizer
+│   └── builtin.c           ← cd, pwd, env, help, exit
+├── include/                ← Header files
+├── backend/
+│   ├── shellforge_adapter.c ← C adapter (JSON bridge)
+│   ├── shellforge_adapter   ← compiled binary (after build)
+│   ├── src/
+│   │   ├── server.js        ← Express REST API
+│   │   └── shellforge.js    ← Node→C adapter wrapper
+│   ├── tests/
+│   │   └── api.test.js      ← 17-case integration test
+│   └── package.json
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx          ← Root component + file ops
+│   │   ├── components/
+│   │   │   ├── Sidebar.jsx
+│   │   │   ├── Topbar.jsx
+│   │   │   ├── FileBrowser.jsx   ← Grid + list view
+│   │   │   ├── FilePreview.jsx   ← Text editor/viewer
+│   │   │   ├── ContextMenu.jsx
+│   │   │   ├── SearchPanel.jsx
+│   │   │   ├── Modals.jsx        ← Create/Rename/Delete/Perms/Props
+│   │   │   └── Notifications.jsx
+│   │   ├── context/AppContext.jsx
+│   │   ├── services/api.js
+│   │   └── utils/fileUtils.js
+│   └── package.json
+├── Makefile
+├── start.sh                ← One-command startup
+└── README.md
+```
+
+---
+
+## Setup & Running
+
+### Prerequisites
+
+- Ubuntu / WSL2
+- gcc (already available)
+- Node.js 20+ (install via nvm if missing)
+
+```bash
+# Install Node.js if needed
+curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+source ~/.bashrc
+nvm install 20
+```
+
+### One-command start
+
+```bash
+# In WSL Ubuntu:
+cd ~/A7_OSSP_PROJECT
+bash start.sh
+```
+
+This will:
+1. Compile ShellForge (`bin/shellforge`)
+2. Compile C adapter (`backend/shellforge_adapter`)
+3. Install npm deps for backend and frontend
+4. Start backend on `http://127.0.0.1:3001`
+5. Start frontend on `http://localhost:5173`
+
+Then open **http://localhost:5173** in your browser.
+
+### Manual steps (if start.sh fails)
+
+```bash
+# 1. Build ShellForge
+cd ~/A7_OSSP_PROJECT && make
+
+# 2. Compile C adapter
+cd backend
+gcc -Wall -Wextra -O2 shellforge_adapter.c -o shellforge_adapter
+
+# 3. Install and start backend
+npm install
+SHELLFORGE_WORKSPACE=/tmp/shellforge_ws node src/server.js &
+
+# 4. Install and start frontend
+cd ../frontend
+npm install
+npm run dev
+```
+
+### Run original ShellForge shell
+
+```bash
+cd ~/A7_OSSP_PROJECT
+./bin/shellforge
+```
+
+### Run integration tests
+
+```bash
+# Backend must be running first
+cd ~/A7_OSSP_PROJECT/backend
+node tests/api.test.js
+```
+
+---
+
+## API Endpoints
+
+| Method | Route | Description |
+|---|---|---|
+| GET | `/api/health` | Backend + adapter status |
+| GET | `/api/files?path=` | List directory contents |
+| GET | `/api/files/metadata?path=` | File/dir metadata + stat info |
+| GET | `/api/files/content?path=` | Read file text (≤512 KB) |
+| POST | `/api/files` | Create file or directory |
+| PUT | `/api/files/content` | Write/update file content |
+| POST | `/api/files/copy` | Copy file or directory |
+| POST | `/api/files/move` | Move file or directory |
+| POST | `/api/files/rename` | Rename file or directory |
+| DELETE | `/api/files` | Delete file or directory |
+| GET | `/api/search?q=&path=` | Recursive name search |
+| GET | `/api/files/permissions?path=` | Get permissions + ownership |
+| PATCH | `/api/files/permissions` | Change permissions (chmod) |
+
+---
+
+## Security Model
+
+- **Workspace root** — all operations confined to `SHELLFORGE_WORKSPACE` (default `/tmp/shellforge_ws`)
+- **Path canonicalization** — `realpath()` resolves symlinks; prefix checked against workspace root
+- **No shell interpolation** — Node.js passes JSON to adapter via stdin; C adapter uses `exec()` not `system()`
+- **No arbitrary exec** — only specific C functions are callable via the `op` field whitelist
+- **Input validation** — filenames validated (no `/`, no `..`); octal mode regex-checked
+- **Payload limits** — Express JSON body limit 10 MB; file read capped at 512 KB
+- **CORS restricted** — only `localhost:5173` and `localhost:3000` accepted
+
+---
+
+## Features Implemented
+
+| Feature | Status | Notes |
+|---|---|---|
+| Browse directories | ✅ | Grid + list view |
+| Create files/folders | ✅ | With name validation |
+| Read/edit text files | ✅ | Inline editor, save with warning |
+| Copy files/dirs | ✅ | Recursive via C adapter |
+| Move files/dirs | ✅ | Cross-fs fallback |
+| Rename | ✅ | |
+| Delete | ✅ | Confirm dialog, recursive |
+| Search | ✅ | Debounced, uses ShellForge find() |
+| Permissions view | ✅ | Unix rwxrwxrwx display |
+| chmod | ✅ | Visual matrix + octal input |
+| File metadata | ✅ | stat, inode, mtime, owner |
+| Upload file | ✅ | Text files |
+| Dark / light theme | ✅ | Persisted to localStorage |
+| Keyboard shortcuts | ✅ | Ctrl+K search, F2 rename, Del delete |
+| Multi-select | ✅ | Ctrl+click |
+| Context menu | ✅ | Right-click on files/dirs |
+| Sort (name/size/date/type) | ✅ | |
+| Path traversal prevention | ✅ | realpath + prefix check in C |
+| Backend health indicator | ✅ | Live status in sidebar |
+
+---
+
+## Known Limitations
+
+- Image preview not rendered (browser context restriction; metadata shown instead)
+- File download via browser not implemented (backend download route exists)
+- Trash/recycle bin not implemented — deletions are permanent
+- Ownership changes (chown) not exposed — requires root
+- No authentication — bind to localhost only, single-user
+
+---
+
+## Screenshots
+
+> Run the app and take screenshots to add here.
+
+---
+
+## GitHub
+
+- **Source**: https://github.com/jwalit-09/A7_OSSP_PROJECT
+- **Team**: A7

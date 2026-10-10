@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --sidebar-width: 240px;
+  }
+  * { box-sizing: border-box; }
+  body { @apply bg-gray-50 text-gray-900 font-sans antialiased; }
+  .dark body { @apply bg-gray-950 text-gray-100; }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium
+           transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-brand-600 text-white hover:bg-brand-700 focus:ring-brand-500;
+  }
+  .btn-ghost {
+    @apply btn text-gray-600 hover:bg-gray-100 hover:text-gray-900
+           dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100
+           focus:ring-gray-400;
+  }
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+  }
+  .card {
+    @apply bg-white dark:bg-gray-900 rounded-xl border border-gray-200
+           dark:border-gray-800 shadow-sm;
+  }
+  .input {
+    @apply w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700
+           bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100
+           placeholder-gray-400 dark:placeholder-gray-500
+           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent
+           transition-colors duration-150;
+  }
+  .sidebar-item {
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
+           text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800
+           hover:text-gray-900 dark:hover:text-gray-100 cursor-pointer
+           transition-colors duration-100;
+  }
+  .sidebar-item.active {
+    @apply bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-400;
+  }
+  .context-menu {
+    @apply fixed z-50 min-w-48 py-1 rounded-xl border border-gray-200
+           dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl
+           animate-fade-in;
+  }
+  .context-item {
+    @apply flex items-center gap-3 w-full px-4 py-2 text-sm text-left
+           text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800
+           transition-colors duration-100 cursor-pointer;
+  }
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { @apply bg-transparent; }
+::-webkit-scrollbar-thumb { @apply bg-gray-300 dark:bg-gray-700 rounded-full; }
+::-webkit-scrollbar-thumb:hover { @apply bg-gray-400 dark:bg-gray-600; }
+
+/* File grid items */
+.file-grid-item {
+  @apply relative flex flex-col items-center gap-2 p-4 rounded-xl border-2
+         border-transparent cursor-pointer select-none
+         hover:bg-gray-50 dark:hover:bg-gray-800/50
+         hover:border-gray-200 dark:hover:border-gray-700
+         transition-all duration-100;
+}
+.file-grid-item.selected {
+  @apply bg-brand-50 dark:bg-brand-900/20 border-brand-300 dark:border-brand-700;
+}
+
+/* File list rows */
+.file-list-row {
+  @apply flex items-center gap-3 px-4 py-2.5 rounded-lg cursor-pointer select-none
+         hover:bg-gray-50 dark:hover:bg-gray-800/50
+         transition-colors duration-100;
+}
+.file-list-row.selected {
+  @apply bg-brand-50 dark:bg-brand-900/20;
+}
+
+/* Drag-over highlight */
+.drag-over {
+  @apply ring-2 ring-brand-400 bg-brand-50 dark:bg-brand-900/20;
+}
+
+/* Editor / preview */
+.code-editor {
+  @apply font-mono text-sm leading-6 resize-none border-0 outline-none
+         bg-transparent w-full h-full text-gray-800 dark:text-gray-200;
+}
+
+/* Loading skeleton */
+.skeleton {
+  @apply animate-pulse bg-gray-200 dark:bg-gray-800 rounded;
+}
+
+/* Permission bits */
+.perm-bit {
+  @apply inline-flex items-center justify-center w-6 h-6 rounded text-xs font-mono font-bold;
+}
+.perm-bit.set   { @apply bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400; }
+.perm-bit.unset { @apply bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600; }
