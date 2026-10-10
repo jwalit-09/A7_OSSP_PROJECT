@@ -1,13 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  X, Save, Edit3, AlertTriangle, FileText,
-  ChevronLeft, ChevronRight,
+  X, Save, Edit3, AlertTriangle, FileText, Star,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useApp } from '../context/AppContext'
 import { FileIcon, formatSize, isTextFile, isImageFile } from '../utils/fileUtils'
 
-export default function FilePreview({ entry, onClose }) {
+export default function FilePreview({ entry, onClose, isStarred, onToggleStar }) {
   const { notify, refresh } = useApp()
   const [content, setContent]   = useState(null)
   const [edited, setEdited]     = useState('')
@@ -105,6 +104,18 @@ export default function FilePreview({ entry, onClose }) {
                 Cancel
               </button>
             </>
+          )}
+          {onToggleStar && (
+            <button
+              onClick={onToggleStar}
+              title={isStarred ? 'Unstar' : 'Star this file'}
+              className="btn-ghost px-2 py-1"
+            >
+              <Star
+                size={14}
+                className={isStarred ? 'text-yellow-500 fill-yellow-500' : 'text-gray-400'}
+              />
+            </button>
           )}
           <button onClick={onClose} className="btn-ghost px-2 py-1">
             <X size={14} />

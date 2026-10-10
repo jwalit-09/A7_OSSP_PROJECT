@@ -1,14 +1,14 @@
 import { useEffect, useRef } from 'react'
 import {
   FolderOpen, Edit3, Copy, Scissors, Clipboard,
-  Trash2, Shield, Info, Download,
+  Trash2, Shield, Info, Download, Star,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 
 export default function ContextMenu({
   x, y, entry, onClose,
   onOpen, onRename, onCopy, onCut, onPaste, onDelete,
-  onProperties, onPermissions,
+  onProperties, onPermissions, onStar, isStarred,
 }) {
   const { clipboard } = useApp()
   const ref = useRef(null)
@@ -78,6 +78,11 @@ export default function ContextMenu({
       {/* Permissions */}
       <Item Icon={Shield}     label="Permissions…"        onClick={onPermissions} />
       <Item Icon={Info}       label="Properties"          onClick={onProperties} />
+      <Item
+        Icon={Star}
+        label={isStarred ? 'Unstar' : 'Star'}
+        onClick={onStar}
+      />
       {!entry?.isDir && (
         <Item
           Icon={Download}

@@ -13,6 +13,7 @@ import {
 } from './components/Modals'
 import { api }                 from './services/api'
 import { joinPath, isTextFile } from './utils/fileUtils'
+import { Star, Clock, FileText } from 'lucide-react'
 
 /* ── Inner app (has access to context) ───────────────────── */
 function FileManager() {
@@ -21,7 +22,9 @@ function FileManager() {
     selectedItems, setSelectedItems,
     notify, refresh, refreshKey,
     clipboard, setClipboard,
-    theme,
+    theme, activeView, setActiveView,
+    starred, isStarred, toggleStar,
+    recent, addRecent,
   } = useApp()
 
   /* Apply theme class on <html> */
@@ -35,7 +38,7 @@ function FileManager() {
   const [previewFile, setPreviewFile] = useState(null)
 
   /* Modals */
-  const [createModal,    setCreateModal]    = useState(null)  // 'file' | 'directory'
+  const [createModal,    setCreateModal]    = useState(null)
   const [renameModal,    setRenameModal]    = useState(false)
   const [deleteModal,    setDeleteModal]    = useState(false)
   const [permsModal,     setPermsModal]     = useState(false)
@@ -43,37 +46,38 @@ function FileManager() {
   const [showSearch,     setShowSearch]     = useState(false)
 
   /* Context menu */
-  const [ctxMenu, setCtxMenu] = useState(null)  // { x, y, entry }
+  const [ctxMenu, setCtxMenu] = useState(null)
 
   /* Permissions data */
   const [permsData, setPermsData] = useState(null)
 
-  /* ── Backend health check ──────────────────────────────── */
+  /* ── Backend health check (polls every 6s if offline) ──── */
   useEffect(() => {
-    api.health()
-      .then(() => setBackendOk(true))
-      .catch(() => setBackendOk(false))
+    function checkHealth() {
+      api.health()
+        .then(() => setBackendOk(true))
+        .catch(() => setBackendOk(false))
+    }
+    checkHealth()
+    const id = setInterval(checkHealth, 6000)
+    return () => clearInterval(id)
   }, [setBackendOk])
 
   /* ── Load directory ────────────────────────────────────── */
   const loadDir = useCallback(async () => {
+    if (activeView !== 'files') return
     setLoading(true)
     try {
       const data = await api.list(currentPath)
       setEntries(data.entries || [])
       setBackendOk(true)
     } catch (e) {
-      if (e.message.includes('fetch') || e.message.includes('network')) {
-        setBackendOk(false)
-        notify('Cannot reach backend – is the server running?', 'error')
-      } else {
-        notify(e.message, 'error')
-      }
+      setBackendOk(false)
       setEntries([])
     } finally {
       setLoading(false)
     }
-  }, [currentPath, refreshKey, setBackendOk, notify])
+  }, [currentPath, refreshKey, activeView, setBackendOk])
 
   useEffect(() => { loadDir() }, [loadDir])
 
@@ -85,18 +89,15 @@ function FileManager() {
       }
       if (e.key === 'F2' && selectedItems.length === 1) setRenameModal(true)
       if (e.key === 'Delete' && selectedItems.length) setDeleteModal(true)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'c' && selectedItems.length)
-        handleCopy()
-      if ((e.metaKey || e.ctrlKey) && e.key === 'x' && selectedItems.length)
-        handleCut()
-      if ((e.metaKey || e.ctrlKey) && e.key === 'v' && clipboard)
-        handlePaste()
+      if ((e.metaKey || e.ctrlKey) && e.key === 'c' && selectedItems.length) handleCopy()
+      if ((e.metaKey || e.ctrlKey) && e.key === 'x' && selectedItems.length) handleCut()
+      if ((e.metaKey || e.ctrlKey) && e.key === 'v' && clipboard) handlePaste()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [selectedItems, clipboard])
 
-  /* ── File operation handlers ───────────────────────────── */
+  /* ── File operations ───────────────────────────────────── */
   async function handleCreate(name) {
     const path = currentPath ? `${currentPath}/${name}` : name
     try {
@@ -183,24 +184,116 @@ function FileManager() {
     }
   }
 
-  /* ── Open entry (double-click or context menu) ─────────── */
+  /* ── Open entry ─────────────────────────────────────────── */
   function handleOpen(entry) {
     if (entry.isDir) {
       navigateTo(entry.path)
     } else {
+      addRecent(entry)
       setPreviewFile(entry)
     }
   }
 
-  /* ── Context menu ──────────────────────────────────────── */
+  /* ── Context menu ───────────────────────────────────────── */
   function handleContextMenu(e, entry) {
     e.preventDefault()
+    setSelectedItems(prev => prev.find(x => x.path === entry.path) ? prev : [entry])
     setCtxMenu({ x: e.clientX, y: e.clientY, entry })
   }
-
   function closeCtx() { setCtxMenu(null) }
-
   const ctxEntry = ctxMenu?.entry
+
+  /* ── Starred view ───────────────────────────────────────── */
+  const StarredView = () => (
+    <div className="flex-1 overflow-auto p-6">
+      <div className="flex items-center gap-2 mb-4">
+        <Star size={20} className="text-yellow-500" />
+        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Starred Files</h2>
+        <span className="text-xs text-gray-400 ml-1">({starred.length} items)</span>
+      </div>
+      {starred.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-64 gap-3">
+          <Star size={40} className="text-gray-200 dark:text-gray-700" />
+          <p className="text-sm text-gray-400 dark:text-gray-500">No starred files yet</p>
+          <p className="text-xs text-gray-300 dark:text-gray-600">Right-click any file and select "Star"</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-2 max-w-2xl">
+          {starred.map(path => {
+            const name = path.split('/').pop()
+            return (
+              <div
+                key={path}
+                className="flex items-center gap-3 p-3 rounded-lg border border-gray-100
+                           dark:border-gray-800 bg-white dark:bg-gray-900 hover:bg-gray-50
+                           dark:hover:bg-gray-800 cursor-pointer group transition-colors"
+                onClick={() => {
+                  const parentPath = path.split('/').slice(0, -1).join('/')
+                  navigateTo(parentPath)
+                }}
+              >
+                <FileText size={18} className="text-brand-500 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{name}</p>
+                  <p className="text-xs text-gray-400 font-mono truncate">{path}</p>
+                </div>
+                <button
+                  onClick={e => { e.stopPropagation(); toggleStar({ path, name }) }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-yellow-50
+                             dark:hover:bg-yellow-900/30"
+                >
+                  <Star size={14} className="text-yellow-500 fill-yellow-500" />
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+
+  /* ── Recent view ─────────────────────────────────────────── */
+  const RecentView = () => (
+    <div className="flex-1 overflow-auto p-6">
+      <div className="flex items-center gap-2 mb-4">
+        <Clock size={20} className="text-blue-500" />
+        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Recent Files</h2>
+        <span className="text-xs text-gray-400 ml-1">({recent.length} items)</span>
+      </div>
+      {recent.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-64 gap-3">
+          <Clock size={40} className="text-gray-200 dark:text-gray-700" />
+          <p className="text-sm text-gray-400 dark:text-gray-500">No recently opened files</p>
+          <p className="text-xs text-gray-300 dark:text-gray-600">Files you open will appear here</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-2 max-w-2xl">
+          {recent.map(entry => (
+            <div
+              key={entry.path}
+              className="flex items-center gap-3 p-3 rounded-lg border border-gray-100
+                         dark:border-gray-800 bg-white dark:bg-gray-900 hover:bg-gray-50
+                         dark:hover:bg-gray-800 cursor-pointer transition-colors"
+              onClick={() => { addRecent(entry); setPreviewFile(entry) }}
+            >
+              <FileText size={18} className="text-blue-400 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{entry.name}</p>
+                <p className="text-xs text-gray-400 font-mono truncate">{entry.path}</p>
+              </div>
+              {entry.size != null && (
+                <span className="text-xs text-gray-400 flex-shrink-0">
+                  {entry.size < 1024 ? `${entry.size} B`
+                   : entry.size < 1024*1024 ? `${(entry.size/1024).toFixed(1)} KB`
+                   : `${(entry.size/1024/1024).toFixed(1)} MB`}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 
   /* ── Render ──────────────────────────────────────────────── */
   return (
@@ -212,26 +305,34 @@ function FileManager() {
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {/* Topbar */}
         <Topbar
-          onNewFile={()   => setCreateModal('file')}
-          onNewFolder={()  => setCreateModal('directory')}
+          onNewFile={()  => setCreateModal('file')}
+          onNewFolder={() => setCreateModal('directory')}
           onRefresh={refresh}
           loading={loading}
         />
 
         {/* File area + optional preview panel */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
-          <FileBrowser
-            entries={entries}
-            loading={loading}
-            onOpenEntry={handleOpen}
-            onContextMenu={handleContextMenu}
-          />
+          {activeView === 'starred' ? <StarredView /> :
+           activeView === 'recent'  ? <RecentView /> :
+           <FileBrowser
+             entries={entries}
+             loading={loading}
+             onOpenEntry={handleOpen}
+             onContextMenu={handleContextMenu}
+           />
+          }
 
           {/* Preview panel */}
           {previewFile && (
             <div className="w-96 flex-shrink-0 border-l border-gray-200 dark:border-gray-800
                             overflow-hidden flex flex-col">
-              <FilePreview entry={previewFile} onClose={() => setPreviewFile(null)} />
+              <FilePreview
+                entry={previewFile}
+                onClose={() => setPreviewFile(null)}
+                isStarred={isStarred(previewFile.path)}
+                onToggleStar={() => toggleStar(previewFile)}
+              />
             </div>
           )}
         </div>
@@ -252,6 +353,8 @@ function FileManager() {
           onCut={handleCut}
           onPaste={handlePaste}
           onDelete={() => setDeleteModal(true)}
+          onStar={() => toggleStar(ctxEntry)}
+          isStarred={ctxEntry ? isStarred(ctxEntry.path) : false}
           onPermissions={async () => {
             await handleLoadPermissions(ctxEntry)
             setPermsModal(true)
@@ -306,7 +409,6 @@ function FileManager() {
   )
 }
 
-/* ── Root ──────────────────────────────────────────────────── */
 export default function App() {
   return (
     <AppProvider>
