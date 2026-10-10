@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { X } from 'lucide-react'
+import { X, Loader2 } from 'lucide-react'
+import { api } from '../services/api'
 
 /* ── Base Modal ──────────────────────────────────────────── */
 function Modal({ open, onClose, title, children, footer }) {
@@ -104,9 +105,11 @@ export function RenameModal({ open, onClose, entry, onConfirm }) {
   const [name, setName] = useState('')
   const [error, setError] = useState('')
 
+  const currentName = entry?.name || entry?.path?.split('/').pop() || ''
+
   useEffect(() => {
-    if (open && entry) { setName(entry.name); setError('') }
-  }, [open, entry])
+    if (open && entry) { setName(currentName); setError('') }
+  }, [open, entry, currentName])
 
   function handleConfirm() {
     const n = name.trim()
@@ -121,7 +124,7 @@ export function RenameModal({ open, onClose, entry, onConfirm }) {
     <Modal
       open={open}
       onClose={onClose}
-      title={`Rename "${entry?.name}"`}
+      title={`Rename "${currentName}"`}
       footer={
         <>
           <button onClick={onClose} className="btn-ghost">Cancel</button>
@@ -145,7 +148,8 @@ export function RenameModal({ open, onClose, entry, onConfirm }) {
 
 /* ── Delete Confirm Modal ────────────────────────────────── */
 export function DeleteModal({ open, onClose, entries, onConfirm }) {
-  const names = entries?.map(e => e.name) || []
+  const list = entries && entries.length ? entries : []
+  const names = list.map(e => e.name || e.path?.split('/').pop() || 'item')
   return (
     <Modal
       open={open}
@@ -292,29 +296,52 @@ export function PermissionsModal({ open, onClose, entry, perms, onSave }) {
 
 /* ── Properties Modal ─────────────────────────────────────── */
 export function PropertiesModal({ open, onClose, entry }) {
-  if (!entry) return null
+  const [meta, setMeta] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (open && entry?.path) {
+      setMeta(entry)
+      setLoading(true)
+      api.metadata(entry.path)
+        .then(data => setMeta(prev => ({ ...prev, ...data })))
+        .catch(() => {})
+        .finally(() => setLoading(false))
+    }
+  }, [open, entry])
+
+  if (!open || !entry) return null
+
+  const data = meta || entry
   const rows = [
-    ['Name', entry.name],
-    ['Path', entry.path],
-    ['Type', entry.type],
-    ['Size', entry.isDir ? '—' : `${entry.size?.toLocaleString()} bytes`],
-    ['Permissions', entry.permissions],
-    ['Octal Mode', entry.octalMode],
-    ['Owner', entry.owner],
-    ['Group', entry.group],
-    ['Modified', entry.mtime ? new Date(entry.mtime).toLocaleString() : '—'],
-    ['Inode', entry.inode],
-    ['Hard links', entry.nlink],
+    ['Name', data.name || data.path?.split('/').pop()],
+    ['Path', data.path],
+    ['Type', data.isDir ? 'Directory' : (data.type || 'File')],
+    ['Size', data.isDir ? '—' : (data.size != null ? `${Number(data.size).toLocaleString()} bytes` : '—')],
+    ['Permissions', data.permissions || '—'],
+    ['Octal Mode', data.octalMode || '—'],
+    ['Owner', data.owner || '—'],
+    ['Group', data.group || '—'],
+    ['Modified', data.mtime ? new Date(data.mtime).toLocaleString() : '—'],
+    ['Accessed', data.atime ? new Date(data.atime).toLocaleString() : undefined],
+    ['Inode', data.inode != null ? String(data.inode) : undefined],
+    ['Hard links', data.nlink != null ? String(data.nlink) : undefined],
   ]
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Properties"
+      title={`Properties: ${entry.name || entry.path?.split('/').pop()}`}
       footer={<button onClick={onClose} className="btn-ghost">Close</button>}
     >
       <div className="space-y-2">
+        {loading && (
+          <div className="flex items-center gap-2 text-xs text-gray-400 py-1">
+            <Loader2 size={13} className="animate-spin text-brand-500" />
+            <span>Fetching attributes via POSIX stat…</span>
+          </div>
+        )}
         {rows.map(([k, v]) => v !== undefined && (
           <div key={k} className="flex gap-4 text-xs py-1 border-b border-gray-100 dark:border-gray-800 last:border-0">
             <span className="w-28 flex-shrink-0 text-gray-500 dark:text-gray-500">{k}</span>

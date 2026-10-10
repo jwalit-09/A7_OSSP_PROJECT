@@ -91,12 +91,14 @@ export function AppProvider({ children }) {
   const isStarred = useCallback((path) => starred.includes(path), [starred])
 
   const toggleStar = useCallback((entry) => {
+    const targetPath = typeof entry === 'string' ? entry : entry?.path
+    if (!targetPath) return
     setStarredState(prev => {
       let next
-      if (prev.includes(entry.path)) {
-        next = prev.filter(p => p !== entry.path)
+      if (prev.includes(targetPath)) {
+        next = prev.filter(p => p !== targetPath)
       } else {
-        next = [...prev, entry.path]
+        next = [...prev, targetPath]
       }
       saveStarred(next)
       return next
@@ -105,10 +107,60 @@ export function AppProvider({ children }) {
 
   /* Recent files */
   const addRecent = useCallback((entry) => {
-    if (entry.isDir) return
+    if (!entry || entry.isDir) return
     setRecentState(prev => {
       const filtered = prev.filter(r => r.path !== entry.path)
-      const next = [{ name: entry.name, path: entry.path, mtime: entry.mtime, size: entry.size, isDir: false }, ...filtered]
+      const next = [{
+        name: entry.name || entry.path.split('/').pop(),
+        path: entry.path,
+        mtime: entry.mtime,
+        size: entry.size,
+        isDir: false,
+      }, ...filtered]
+      saveRecent(next)
+      return next
+    })
+  }, [])
+
+  const clearRecent = useCallback(() => {
+    setRecentState([])
+    saveRecent([])
+  }, [])
+
+  /* Sync starred and recent on file operations */
+  const syncDeleted = useCallback((path) => {
+    setStarredState(prev => {
+      const next = prev.filter(p => p !== path && !p.startsWith(path + '/'))
+      saveStarred(next)
+      return next
+    })
+    setRecentState(prev => {
+      const next = prev.filter(r => r.path !== path && !r.path.startsWith(path + '/'))
+      saveRecent(next)
+      return next
+    })
+  }, [])
+
+  const syncRenamed = useCallback((oldPath, newPath, newName) => {
+    setStarredState(prev => {
+      const next = prev.map(p => {
+        if (p === oldPath) return newPath
+        if (p.startsWith(oldPath + '/')) return newPath + p.slice(oldPath.length)
+        return p
+      })
+      saveStarred(next)
+      return next
+    })
+    setRecentState(prev => {
+      const next = prev.map(r => {
+        if (r.path === oldPath) {
+          return { ...r, path: newPath, name: newName || newPath.split('/').pop() }
+        }
+        if (r.path.startsWith(oldPath + '/')) {
+          return { ...r, path: newPath + r.path.slice(oldPath.length) }
+        }
+        return r
+      })
       saveRecent(next)
       return next
     })
@@ -140,7 +192,8 @@ export function AppProvider({ children }) {
       clipboard, setClipboard,
       refreshKey, refresh,
       starred, isStarred, toggleStar,
-      recent, addRecent,
+      recent, addRecent, clearRecent,
+      syncDeleted, syncRenamed,
     }}>
       {children}
     </AppContext.Provider>

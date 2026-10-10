@@ -1,23 +1,48 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { useApp } from '../context/AppContext'
-import { FileIcon, formatSize, formatDate } from '../utils/fileUtils'
+import { FileIcon, formatSize, formatDate, isImageFile } from '../utils/fileUtils'
 import {
-  Folder, MoreVertical,
+  Folder, Star,
 } from 'lucide-react'
 
 /* ── Grid item ────────────────────────────────────────────── */
 function GridItem({ entry, selected, onClick, onDoubleClick, onContextMenu }) {
+  const { isStarred } = useApp()
+  const starred = isStarred(entry.path)
+  const isImage = isImageFile(entry.name)
+
   return (
     <div
-      className={`file-grid-item group ${selected ? 'selected' : ''}`}
+      className={`file-grid-item group relative ${selected ? 'selected' : ''}`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
       draggable
     >
-      {/* Icon */}
-      <div className="relative">
-        <FileIcon entry={entry} size={40} />
+      {/* Star indicator */}
+      {starred && (
+        <span className="absolute top-1.5 right-1.5 text-yellow-500 z-10" title="Starred">
+          <Star size={12} className="fill-yellow-500" />
+        </span>
+      )}
+
+      {/* Icon or Image thumbnail */}
+      <div className="relative flex items-center justify-center w-12 h-12 my-1">
+        {isImage ? (
+          <img
+            src={`/api/files/raw?path=${encodeURIComponent(entry.path)}`}
+            alt={entry.name}
+            className="w-12 h-12 object-cover rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+              const fallback = e.currentTarget.nextElementSibling;
+              if (fallback) fallback.style.display = 'flex';
+            }}
+          />
+        ) : null}
+        <div style={{ display: isImage ? 'none' : 'flex' }} className="items-center justify-center">
+          <FileIcon entry={entry} size={40} />
+        </div>
         {entry.isDir && (
           <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-amber-100
                            dark:bg-amber-900/40 flex items-center justify-center">
@@ -28,7 +53,7 @@ function GridItem({ entry, selected, onClick, onDoubleClick, onContextMenu }) {
 
       {/* Name */}
       <p className="text-xs font-medium text-gray-800 dark:text-gray-200 text-center
-                    max-w-[88px] truncate leading-tight"
+                    max-w-[88px] truncate leading-tight mt-0.5"
          title={entry.name}>
         {entry.name}
       </p>
@@ -43,6 +68,10 @@ function GridItem({ entry, selected, onClick, onDoubleClick, onContextMenu }) {
 
 /* ── List item ────────────────────────────────────────────── */
 function ListItem({ entry, selected, onClick, onDoubleClick, onContextMenu }) {
+  const { isStarred } = useApp()
+  const starred = isStarred(entry.path)
+  const isImage = isImageFile(entry.name)
+
   return (
     <div
       className={`file-list-row group ${selected ? 'selected' : ''}`}
@@ -50,7 +79,28 @@ function ListItem({ entry, selected, onClick, onDoubleClick, onContextMenu }) {
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
     >
-      <FileIcon entry={entry} size={18} />
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        {starred ? (
+          <Star size={13} className="text-yellow-500 fill-yellow-500 flex-shrink-0" />
+        ) : (
+          <span className="w-[13px]" />
+        )}
+        {isImage ? (
+          <img
+            src={`/api/files/raw?path=${encodeURIComponent(entry.path)}`}
+            alt={entry.name}
+            className="w-5 h-5 object-cover rounded shadow-sm border border-gray-200 dark:border-gray-700 flex-shrink-0"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+              const fallback = e.currentTarget.nextElementSibling;
+              if (fallback) fallback.style.display = 'inline-block';
+            }}
+          />
+        ) : null}
+        <div style={{ display: isImage ? 'none' : 'inline-block' }}>
+          <FileIcon entry={entry} size={18} />
+        </div>
+      </div>
 
       <span className="flex-1 min-w-0 text-sm font-medium text-gray-800 dark:text-gray-200
                        truncate"
@@ -78,17 +128,6 @@ export default function FileBrowser({ entries, loading, onOpenEntry, onContextMe
 
   const sorted = sortEntries(entries || [])
 
-  /* Deselect on outside click */
-  useEffect(() => {
-    function handleClick(e) {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setSelectedItems([])
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [setSelectedItems])
-
   function handleItemClick(e, entry) {
     e.stopPropagation()
     if (e.ctrlKey || e.metaKey) {
@@ -108,6 +147,7 @@ export default function FileBrowser({ entries, loading, onOpenEntry, onContextMe
 
   function handleContextMenu(e, entry) {
     e.preventDefault()
+    e.stopPropagation()
     if (!selectedItems.some(s => s.path === entry.path)) {
       setSelectedItems([entry])
     }

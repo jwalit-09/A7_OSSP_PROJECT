@@ -32,7 +32,8 @@ export async function callAdapter(op, args = []) {
   return new Promise((resolve, reject) => {
     let child;
     if (process.platform === 'win32') {
-      child = spawn('wsl', ['-u', 'saicharan', 'bash', '-c', 'export SHELLFORGE_WORKSPACE=/tmp/shellforge_ws; /home/saicharan/A7_OSSP_PROJECT/backend/shellforge_adapter'], {
+      const wslAdapter = ADAPTER_BIN.replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_, d) => '/mnt/' + d.toLowerCase());
+      child = spawn('wsl', ['bash', '-c', `export SHELLFORGE_WORKSPACE="${WORKSPACE}"; "${wslAdapter}"`], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
     } else {

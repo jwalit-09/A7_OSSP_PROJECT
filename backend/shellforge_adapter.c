@@ -101,16 +101,23 @@ static int safe_resolve(const char *user_path, char *resolved, size_t len)
 {
     char candidate[PATH_MAX];
 
-    /* If the user_path is relative treat it as relative to WORKSPACE */
-    if (user_path[0] == '/')
-        snprintf(candidate, sizeof(candidate), "%s", user_path);
-    else
-        snprintf(candidate, sizeof(candidate), "%s/%s", WORKSPACE, user_path);
+    /* Check if already an absolute path within WORKSPACE */
+    size_t wlen = strlen(WORKSPACE);
+    const char *p = user_path;
+    if (strncmp(p, WORKSPACE, wlen) == 0 && (p[wlen] == '\0' || p[wlen] == '/')) {
+        snprintf(candidate, sizeof(candidate), "%s", p);
+    } else {
+        while (*p == '/') p++;
+        if (*p == '\0') {
+            snprintf(candidate, sizeof(candidate), "%s", WORKSPACE);
+        } else {
+            snprintf(candidate, sizeof(candidate), "%s/%s", WORKSPACE, p);
+        }
+    }
 
     /* Attempt full realpath resolution */
     if (realpath(candidate, resolved) != NULL) {
         /* Ensure it is inside WORKSPACE */
-        size_t wlen = strlen(WORKSPACE);
         if (strncmp(resolved, WORKSPACE, wlen) != 0 ||
             (resolved[wlen] != '\0' && resolved[wlen] != '/')) {
             emit_error("Path traversal denied");
@@ -145,7 +152,6 @@ static int safe_resolve(const char *user_path, char *resolved, size_t len)
     }
 
     /* Check parent is inside workspace */
-    size_t wlen = strlen(WORKSPACE);
     if (strncmp(parent_resolved, WORKSPACE, wlen) != 0 ||
         (parent_resolved[wlen] != '\0' && parent_resolved[wlen] != '/')) {
         emit_error("Path traversal denied");

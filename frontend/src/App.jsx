@@ -12,8 +12,8 @@ import {
   PermissionsModal, PropertiesModal,
 } from './components/Modals'
 import { api }                 from './services/api'
-import { joinPath, isTextFile } from './utils/fileUtils'
-import { Star, Clock, FileText } from 'lucide-react'
+import { joinPath, isTextFile, isImageFile, FileIcon, formatSize, formatDate } from './utils/fileUtils'
+import { Star, Clock, FileText, Trash2 } from 'lucide-react'
 
 /* ── Inner app (has access to context) ───────────────────── */
 function FileManager() {
@@ -24,7 +24,8 @@ function FileManager() {
     clipboard, setClipboard,
     theme, activeView, setActiveView,
     starred, isStarred, toggleStar,
-    recent, addRecent,
+    recent, addRecent, clearRecent,
+    syncDeleted, syncRenamed,
   } = useApp()
 
   /* Apply theme class on <html> */
@@ -44,6 +45,10 @@ function FileManager() {
   const [permsModal,     setPermsModal]     = useState(false)
   const [propsModal,     setPropsModal]     = useState(false)
   const [showSearch,     setShowSearch]     = useState(false)
+
+  /* Explicit action targets (so right-click works even when unselected) */
+  const [actionEntry, setActionEntry] = useState(null)
+  const [deleteList,  setDeleteList]  = useState([])
 
   /* Context menu */
   const [ctxMenu, setCtxMenu] = useState(null)
@@ -87,8 +92,14 @@ function FileManager() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault(); setShowSearch(true)
       }
-      if (e.key === 'F2' && selectedItems.length === 1) setRenameModal(true)
-      if (e.key === 'Delete' && selectedItems.length) setDeleteModal(true)
+      if (e.key === 'F2' && selectedItems.length === 1) {
+        setActionEntry(selectedItems[0])
+        setRenameModal(true)
+      }
+      if (e.key === 'Delete' && selectedItems.length) {
+        setDeleteList([...selectedItems])
+        setDeleteModal(true)
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === 'c' && selectedItems.length) handleCopy()
       if ((e.metaKey || e.ctrlKey) && e.key === 'x' && selectedItems.length) handleCut()
       if ((e.metaKey || e.ctrlKey) && e.key === 'v' && clipboard) handlePaste()
@@ -110,40 +121,62 @@ function FileManager() {
   }
 
   async function handleRename(newName) {
-    const entry = selectedItems[0]
+    const entry = actionEntry || selectedItems[0]
     if (!entry) return
+    const oldPath = entry.path
+    const parentDir = oldPath.includes('/') ? oldPath.substring(0, oldPath.lastIndexOf('/')) : ''
+    const newPath = parentDir ? `${parentDir}/${newName}` : newName
+
     try {
-      await api.rename(entry.path, newName)
+      await api.rename(oldPath, newName)
+      syncRenamed(oldPath, newPath, newName)
+      if (previewFile?.path === oldPath) {
+        setPreviewFile(prev => ({ ...prev, path: newPath, name: newName }))
+      }
       notify(`Renamed to: ${newName}`, 'success')
       refresh()
       setSelectedItems([])
+      setActionEntry(null)
     } catch (e) {
       notify(`Rename failed: ${e.message}`, 'error')
     }
   }
 
   async function handleDelete() {
-    for (const entry of selectedItems) {
+    const toDelete = deleteList.length ? deleteList : (actionEntry ? [actionEntry] : selectedItems)
+    if (!toDelete.length) return
+
+    for (const entry of toDelete) {
       try {
         await api.remove(entry.path)
+        syncDeleted(entry.path)
+        if (previewFile?.path === entry.path) {
+          setPreviewFile(null)
+        }
       } catch (e) {
         notify(`Delete failed for "${entry.name}": ${e.message}`, 'error')
         return
       }
     }
-    notify(`Deleted ${selectedItems.length} item(s)`, 'success')
+    notify(`Deleted ${toDelete.length} item(s)`, 'success')
     setSelectedItems([])
+    setDeleteList([])
+    setActionEntry(null)
     refresh()
   }
 
-  function handleCopy() {
-    setClipboard({ op: 'copy', entries: [...selectedItems] })
-    notify(`Copied ${selectedItems.length} item(s) to clipboard`, 'info')
+  function handleCopy(entry) {
+    const items = entry ? [entry] : selectedItems
+    if (!items.length) return
+    setClipboard({ op: 'copy', entries: [...items] })
+    notify(`Copied ${items.length} item(s) to clipboard`, 'info')
   }
 
-  function handleCut() {
-    setClipboard({ op: 'cut', entries: [...selectedItems] })
-    notify(`Cut ${selectedItems.length} item(s) – paste to move`, 'info')
+  function handleCut(entry) {
+    const items = entry ? [entry] : selectedItems
+    if (!items.length) return
+    setClipboard({ op: 'cut', entries: [...items] })
+    notify(`Cut ${items.length} item(s) – paste to move`, 'info')
   }
 
   async function handlePaste() {
@@ -164,6 +197,7 @@ function FileManager() {
   }
 
   async function handleLoadPermissions(entry) {
+    if (!entry) return
     try {
       const data = await api.getPermissions(entry.path)
       setPermsData(data)
@@ -173,12 +207,13 @@ function FileManager() {
   }
 
   async function handleSavePermissions(mode) {
-    const entry = selectedItems[0]
+    const entry = actionEntry || selectedItems[0]
     if (!entry) return
     try {
       await api.setPermissions(entry.path, mode)
       notify(`Permissions updated to ${mode}`, 'success')
       refresh()
+      setActionEntry(null)
     } catch (e) {
       notify(`chmod failed: ${e.message}`, 'error')
     }
@@ -186,6 +221,7 @@ function FileManager() {
 
   /* ── Open entry ─────────────────────────────────────────── */
   function handleOpen(entry) {
+    if (!entry) return
     if (entry.isDir) {
       navigateTo(entry.path)
     } else {
@@ -197,20 +233,26 @@ function FileManager() {
   /* ── Context menu ───────────────────────────────────────── */
   function handleContextMenu(e, entry) {
     e.preventDefault()
-    setSelectedItems(prev => prev.find(x => x.path === entry.path) ? prev : [entry])
+    e.stopPropagation()
+    setSelectedItems(prev => prev.some(x => x.path === entry.path) ? prev : [entry])
+    setActionEntry(entry)
     setCtxMenu({ x: e.clientX, y: e.clientY, entry })
   }
+
   function closeCtx() { setCtxMenu(null) }
-  const ctxEntry = ctxMenu?.entry
+  const ctxEntry = ctxMenu?.entry || actionEntry
 
   /* ── Starred view ───────────────────────────────────────── */
   const StarredView = () => (
-    <div className="flex-1 overflow-auto p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Star size={20} className="text-yellow-500" />
-        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Starred Files</h2>
-        <span className="text-xs text-gray-400 ml-1">({starred.length} items)</span>
+    <div className="flex-1 overflow-auto p-6" onClick={() => setSelectedItems([])}>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Star size={20} className="text-yellow-500 fill-yellow-500" />
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Starred Files</h2>
+          <span className="text-xs text-gray-400 ml-1">({starred.length} items)</span>
+        </div>
       </div>
+
       {starred.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 gap-3">
           <Star size={40} className="text-gray-200 dark:text-gray-700" />
@@ -220,29 +262,32 @@ function FileManager() {
       ) : (
         <div className="grid grid-cols-1 gap-2 max-w-2xl">
           {starred.map(path => {
-            const name = path.split('/').pop()
+            const name = path.split('/').pop() || path
+            const dummyEntry = {
+              name,
+              path,
+              isDir: false,
+            }
             return (
               <div
                 key={path}
                 className="flex items-center gap-3 p-3 rounded-lg border border-gray-100
                            dark:border-gray-800 bg-white dark:bg-gray-900 hover:bg-gray-50
-                           dark:hover:bg-gray-800 cursor-pointer group transition-colors"
-                onClick={() => {
-                  const parentPath = path.split('/').slice(0, -1).join('/')
-                  navigateTo(parentPath)
-                }}
+                           dark:hover:bg-gray-800 cursor-pointer group transition-colors shadow-sm"
+                onClick={() => handleOpen(dummyEntry)}
+                onContextMenu={e => handleContextMenu(e, dummyEntry)}
               >
-                <FileText size={18} className="text-brand-500 flex-shrink-0" />
+                <FileIcon entry={dummyEntry} size={20} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{name}</p>
                   <p className="text-xs text-gray-400 font-mono truncate">{path}</p>
                 </div>
                 <button
-                  onClick={e => { e.stopPropagation(); toggleStar({ path, name }) }}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-yellow-50
-                             dark:hover:bg-yellow-900/30"
+                  onClick={e => { e.stopPropagation(); toggleStar(dummyEntry) }}
+                  className="p-1.5 rounded hover:bg-yellow-50 dark:hover:bg-yellow-900/30 transition-colors"
+                  title="Unstar"
                 >
-                  <Star size={14} className="text-yellow-500 fill-yellow-500" />
+                  <Star size={16} className="text-yellow-500 fill-yellow-500" />
                 </button>
               </div>
             )
@@ -254,12 +299,23 @@ function FileManager() {
 
   /* ── Recent view ─────────────────────────────────────────── */
   const RecentView = () => (
-    <div className="flex-1 overflow-auto p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Clock size={20} className="text-blue-500" />
-        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Recent Files</h2>
-        <span className="text-xs text-gray-400 ml-1">({recent.length} items)</span>
+    <div className="flex-1 overflow-auto p-6" onClick={() => setSelectedItems([])}>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Clock size={20} className="text-blue-500" />
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Recent Files</h2>
+          <span className="text-xs text-gray-400 ml-1">({recent.length} items)</span>
+        </div>
+        {recent.length > 0 && (
+          <button
+            onClick={clearRecent}
+            className="btn-ghost px-2.5 py-1 text-xs text-gray-500 hover:text-red-600 dark:hover:text-red-400"
+          >
+            Clear Recents
+          </button>
+        )}
       </div>
+
       {recent.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 gap-3">
           <Clock size={40} className="text-gray-200 dark:text-gray-700" />
@@ -273,19 +329,18 @@ function FileManager() {
               key={entry.path}
               className="flex items-center gap-3 p-3 rounded-lg border border-gray-100
                          dark:border-gray-800 bg-white dark:bg-gray-900 hover:bg-gray-50
-                         dark:hover:bg-gray-800 cursor-pointer transition-colors"
-              onClick={() => { addRecent(entry); setPreviewFile(entry) }}
+                         dark:hover:bg-gray-800 cursor-pointer transition-colors shadow-sm"
+              onClick={() => handleOpen(entry)}
+              onContextMenu={e => handleContextMenu(e, entry)}
             >
-              <FileText size={18} className="text-blue-400 flex-shrink-0" />
+              <FileIcon entry={entry} size={20} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{entry.name}</p>
                 <p className="text-xs text-gray-400 font-mono truncate">{entry.path}</p>
               </div>
               {entry.size != null && (
                 <span className="text-xs text-gray-400 flex-shrink-0">
-                  {entry.size < 1024 ? `${entry.size} B`
-                   : entry.size < 1024*1024 ? `${(entry.size/1024).toFixed(1)} KB`
-                   : `${(entry.size/1024/1024).toFixed(1)} MB`}
+                  {formatSize(entry.size)}
                 </span>
               )}
             </div>
@@ -348,18 +403,31 @@ function FileManager() {
           entry={ctxEntry}
           onClose={closeCtx}
           onOpen={() => handleOpen(ctxEntry)}
-          onRename={() => setRenameModal(true)}
-          onCopy={handleCopy}
-          onCut={handleCut}
+          onRename={() => {
+            setActionEntry(ctxEntry)
+            setRenameModal(true)
+          }}
+          onCopy={() => handleCopy(ctxEntry)}
+          onCut={() => handleCut(ctxEntry)}
           onPaste={handlePaste}
-          onDelete={() => setDeleteModal(true)}
+          onDelete={() => {
+            const list = selectedItems.length > 1 && selectedItems.some(s => s.path === ctxEntry.path)
+              ? [...selectedItems]
+              : [ctxEntry]
+            setDeleteList(list)
+            setDeleteModal(true)
+          }}
           onStar={() => toggleStar(ctxEntry)}
           isStarred={ctxEntry ? isStarred(ctxEntry.path) : false}
           onPermissions={async () => {
+            setActionEntry(ctxEntry)
             await handleLoadPermissions(ctxEntry)
             setPermsModal(true)
           }}
-          onProperties={() => setPropsModal(true)}
+          onProperties={() => {
+            setActionEntry(ctxEntry)
+            setPropsModal(true)
+          }}
         />
       )}
 
@@ -380,27 +448,40 @@ function FileManager() {
       />
       <RenameModal
         open={renameModal}
-        entry={selectedItems[0]}
-        onClose={() => setRenameModal(false)}
+        entry={actionEntry || selectedItems[0]}
+        onClose={() => {
+          setRenameModal(false)
+          setActionEntry(null)
+        }}
         onConfirm={handleRename}
       />
       <DeleteModal
         open={deleteModal}
-        entries={selectedItems}
-        onClose={() => setDeleteModal(false)}
+        entries={deleteList.length ? deleteList : (actionEntry ? [actionEntry] : selectedItems)}
+        onClose={() => {
+          setDeleteModal(false)
+          setDeleteList([])
+          setActionEntry(null)
+        }}
         onConfirm={handleDelete}
       />
       <PermissionsModal
         open={permsModal}
-        entry={selectedItems[0]}
+        entry={actionEntry || selectedItems[0]}
         perms={permsData}
-        onClose={() => setPermsModal(false)}
+        onClose={() => {
+          setPermsModal(false)
+          setActionEntry(null)
+        }}
         onSave={handleSavePermissions}
       />
       <PropertiesModal
         open={propsModal}
-        entry={selectedItems[0]}
-        onClose={() => setPropsModal(false)}
+        entry={actionEntry || selectedItems[0]}
+        onClose={() => {
+          setPropsModal(false)
+          setActionEntry(null)
+        }}
       />
 
       {/* Notifications */}

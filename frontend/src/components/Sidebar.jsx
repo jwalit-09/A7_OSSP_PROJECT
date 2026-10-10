@@ -103,7 +103,7 @@ export default function Sidebar({ onSearch }) {
         </button>
 
         {/* Starred quick list */}
-        {activeView === 'starred' && starred.length > 0 && (
+        {starred.length > 0 && (
           <>
             <p className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest
                           text-gray-400 dark:text-gray-600">
@@ -112,14 +112,10 @@ export default function Sidebar({ onSearch }) {
             {starred.slice(0, 8).map(path => (
               <button
                 key={path}
-                onClick={() => {
-                  const parts = path.split('/')
-                  const parentPath = parts.slice(0, -1).join('/')
-                  navigateTo(parentPath)
-                }}
+                onClick={() => setActiveView('starred')}
                 className="sidebar-item w-full text-left text-xs truncate pl-5"
               >
-                <Star size={12} className="text-yellow-500 flex-shrink-0" />
+                <Star size={12} className="text-yellow-500 fill-yellow-500 flex-shrink-0" />
                 <span className="truncate">{path.split('/').pop()}</span>
               </button>
             ))}

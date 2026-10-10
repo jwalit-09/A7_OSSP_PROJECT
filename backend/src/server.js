@@ -34,9 +34,13 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
 });
 
-const LOCAL_WORKSPACE = process.platform === 'win32'
-  ? '\\\\wsl$\\Ubuntu\\tmp\\shellforge_ws'
-  : WORKSPACE;
+const LOCAL_WORKSPACE = process.env.SHELLFORGE_WORKSPACE || (
+  process.platform === 'win32'
+    ? (fs.existsSync('\\\\wsl.localhost\\Ubuntu\\tmp\\shellforge_ws')
+        ? '\\\\wsl.localhost\\Ubuntu\\tmp\\shellforge_ws'
+        : '\\\\wsl$\\Ubuntu\\tmp\\shellforge_ws')
+    : WORKSPACE
+);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -116,8 +120,13 @@ app.get('/api/files/raw', async (req, res) => {
   try {
     const meta = await callAdapter('stat', [reqPath]);
     if (meta.isDir) return fail(res, 'Cannot view directory as raw file');
-    const fullPath = join(LOCAL_WORKSPACE, reqPath);
-    res.sendFile(fullPath);
+    const safeRel = reqPath.replace(/^\/+/, '');
+    const fullPath = join(LOCAL_WORKSPACE, safeRel);
+    res.sendFile(fullPath, (err) => {
+      if (err && !res.headersSent) {
+        fail(res, `Cannot send file: ${err.message}`, 404);
+      }
+    });
   } catch (e) {
     fail(res, e.message, 422);
   }
@@ -185,12 +194,13 @@ app.post('/api/files/rename', async (req, res) => {
   if (newName.includes('/') || newName === '.' || newName === '..')
     return fail(res, 'Invalid filename');
 
-  /* Build dst = parent(src) / newName */
-  const parentDir = src.includes('/') ? src.substring(0, src.lastIndexOf('/')) : '';
+  const cleanSrc = src.replace(/^\/+/, '');
+  /* Build dst = parent(cleanSrc) / newName */
+  const parentDir = cleanSrc.includes('/') ? cleanSrc.substring(0, cleanSrc.lastIndexOf('/')) : '';
   const dst = parentDir ? `${parentDir}/${newName}` : newName;
 
   try {
-    await callAdapter('move', [src, dst]);
+    await callAdapter('move', [cleanSrc, dst]);
     const meta = await callAdapter('stat', [dst]);
     ok(res, meta, 'Renamed successfully');
   } catch (e) {
@@ -203,7 +213,8 @@ app.delete('/api/files', async (req, res) => {
   const { path } = req.body;
   if (!path) return fail(res, "'path' is required");
   try {
-    await callAdapter('remove', [path]);
+    const cleanPath = path.replace(/^\/+/, '');
+    await callAdapter('remove', [cleanPath]);
     ok(res, {}, 'Deleted successfully');
   } catch (e) {
     fail(res, e.message, 422);

@@ -18,6 +18,14 @@ export default function FilePreview({ entry, onClose, isStarred, onToggleStar })
 
   const loadContent = useCallback(async () => {
     if (!entry || entry.isDir) return
+    if (isImageFile(entry.name)) {
+      setLoading(false)
+      setError(null)
+      setContent(null)
+      setEdited('')
+      setIsDirty(false)
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -144,14 +152,27 @@ export default function FilePreview({ entry, onClose, isStarred, onToggleStar })
 
         {!loading && !error && isImage && (
           <div className="flex flex-col items-center justify-center h-full p-4 overflow-auto">
-            <img
-              src={`/api/files/raw?path=${encodeURIComponent(entry.path)}`}
-              alt={entry.name}
-              className="max-h-[80%] max-w-[90%] object-contain rounded-lg shadow-md border border-gray-200 dark:border-gray-800"
-            />
-            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-              {entry.name} ({formatSize(entry.size)})
-            </p>
+            <div className="relative flex items-center justify-center max-h-[80%] max-w-[95%]">
+              <img
+                src={`/api/files/raw?path=${encodeURIComponent(entry.path)}`}
+                alt={entry.name}
+                onError={() => setError('Image could not be loaded or format not supported by browser.')}
+                className="max-h-[70vh] max-w-full object-contain rounded-lg shadow-md border border-gray-200 dark:border-gray-800 bg-checkerboard"
+              />
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {entry.name} ({formatSize(entry.size)})
+              </p>
+              <a
+                href={`/api/files/raw?path=${encodeURIComponent(entry.path)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-brand-600 dark:text-brand-400 hover:underline ml-2"
+              >
+                Open full image
+              </a>
+            </div>
           </div>
         )}
 

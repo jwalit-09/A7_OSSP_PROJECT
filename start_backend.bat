@@ -7,5 +7,5 @@ echo   ShellForge Backend Server
 echo   DO NOT CLOSE THIS WINDOW
 echo  ===================================================
 echo.
-wsl -u saicharan bash /home/saicharan/A7_OSSP_PROJECT/backend_daemon.sh
+wsl bash -c "export NVM_DIR=\"$HOME/.nvm\"; [ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\"; export SHELLFORGE_WORKSPACE=/tmp/shellforge_ws; bash \"\$(wslpath '%~dp0backend_daemon.sh')\""
 pause
