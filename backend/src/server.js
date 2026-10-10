@@ -23,6 +23,7 @@
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
+import { join } from 'path';
 import { callAdapter, WORKSPACE } from './shellforge.js';
 
 const app = express();
@@ -93,6 +94,20 @@ app.get('/api/files/content', async (req, res) => {
   } catch (e) {
     const status = e.message.includes('too large') ? 413 : 422;
     fail(res, e.message, status);
+  }
+});
+
+/* ── Serve raw file (for image preview & download) ──────── */
+app.get('/api/files/raw', async (req, res) => {
+  const { path: reqPath } = req.query;
+  if (!reqPath) return fail(res, "'path' query param required");
+  try {
+    const meta = await callAdapter('stat', [reqPath]);
+    if (meta.isDir) return fail(res, 'Cannot view directory as raw file');
+    const fullPath = join(WORKSPACE, reqPath);
+    res.sendFile(fullPath);
+  } catch (e) {
+    fail(res, e.message, 422);
   }
 });
 
