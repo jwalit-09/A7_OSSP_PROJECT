@@ -49,4 +49,24 @@ export const api = {
     req('GET', `/files/permissions?path=${encodeURIComponent(path)}`),
   setPermissions: (path, mode) =>
     req('PATCH', '/files/permissions', { path, mode }),
+
+  /* Upload */
+  uploadFile: async (file, path = '') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('path', path);
+    const res = await fetch(`${BASE}/files/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message || 'Upload failed');
+    return json.data;
+  },
+
+  /* Download URL */
+  downloadUrl: (path) => `${BASE}/files/download?path=${encodeURIComponent(path)}`,
+
+  /* System Info */
+  systemInfo: () => req('GET', '/system'),
 };

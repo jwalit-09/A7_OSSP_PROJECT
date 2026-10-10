@@ -24,7 +24,15 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import { join } from 'path';
+import fs from 'fs';
+import os from 'os';
+import multer from 'multer';
 import { callAdapter, WORKSPACE } from './shellforge.js';
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+});
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -245,6 +253,69 @@ app.patch('/api/files/permissions', async (req, res) => {
     ok(res, meta, 'Permissions updated');
   } catch (e) {
     fail(res, e.message, 422);
+  }
+});
+
+/* ── Binary / Multipart Upload ─────────────────────────── */
+app.post('/api/files/upload', upload.single('file'), async (req, res) => {
+  const { path: dirPath = '' } = req.body;
+  if (!req.file) return fail(res, 'No file uploaded');
+
+  const fileName = req.file.originalname;
+  if (fileName.includes('/') || fileName.includes('..')) {
+    return fail(res, 'Invalid filename');
+  }
+
+  const targetPath = dirPath ? `${dirPath}/${fileName}` : fileName;
+  try {
+    /* Touch file through C adapter to validate path and set permissions */
+    await callAdapter('touch', [targetPath]);
+    const fullTarget = join(WORKSPACE, targetPath);
+    await fs.promises.writeFile(fullTarget, req.file.buffer);
+    const meta = await callAdapter('stat', [targetPath]);
+    ok(res, meta, `Uploaded ${fileName}`);
+  } catch (e) {
+    fail(res, e.message, 422);
+  }
+});
+
+/* ── Download file ──────────────────────────────────────── */
+app.get('/api/files/download', async (req, res) => {
+  const { path: reqPath } = req.query;
+  if (!reqPath) return fail(res, "'path' query param required");
+  try {
+    const meta = await callAdapter('stat', [reqPath]);
+    if (meta.isDir) return fail(res, 'Cannot download a directory');
+    const fullPath = join(WORKSPACE, reqPath);
+    res.download(fullPath, meta.name);
+  } catch (e) {
+    fail(res, e.message, 422);
+  }
+});
+
+/* ── System Status & Disk Usage ─────────────────────────── */
+app.get('/api/system', async (_req, res) => {
+  try {
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const cpus = os.cpus();
+    const uptime = os.uptime();
+    ok(res, {
+      platform: os.platform(),
+      release: os.release(),
+      arch: os.arch(),
+      uptimeSeconds: uptime,
+      memory: {
+        totalBytes: totalMem,
+        freeBytes: freeMem,
+        usedBytes: totalMem - freeMem,
+      },
+      cpuCount: cpus.length,
+      cpuModel: cpus[0]?.model || 'Unknown',
+      loadAvg: os.loadavg(),
+    });
+  } catch (e) {
+    fail(res, e.message, 500);
   }
 });
 

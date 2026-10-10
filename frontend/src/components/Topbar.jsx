@@ -29,9 +29,7 @@ export default function Topbar({ onNewFile, onNewFolder, onRefresh, loading }) {
     const file = e.target.files[0]
     if (!file) return
     try {
-      const content = await file.text()
-      const path = currentPath ? `${currentPath}/${file.name}` : file.name
-      await api.writeFile(path, content)
+      await api.uploadFile(file, currentPath)
       notify(`Uploaded: ${file.name}`, 'success')
       refresh()
     } catch (err) {

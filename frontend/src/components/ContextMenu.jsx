@@ -78,6 +78,18 @@ export default function ContextMenu({
       {/* Permissions */}
       <Item Icon={Shield}     label="Permissions…"        onClick={onPermissions} />
       <Item Icon={Info}       label="Properties"          onClick={onProperties} />
+      {!entry?.isDir && (
+        <Item
+          Icon={Download}
+          label="Download"
+          onClick={() => {
+            const a = document.createElement('a')
+            a.href = `/api/files/download?path=${encodeURIComponent(entry.path)}`
+            a.download = entry.name
+            a.click()
+          }}
+        />
+      )}
 
       {sep}
 
