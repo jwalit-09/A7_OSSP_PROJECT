@@ -30,10 +30,17 @@ export const WORKSPACE = process.env.SHELLFORGE_WORKSPACE || '/tmp/shellforge_ws
  */
 export async function callAdapter(op, args = []) {
   return new Promise((resolve, reject) => {
-    const child = spawn(ADAPTER_BIN, [], {
-      env: { ...process.env, SHELLFORGE_WORKSPACE: WORKSPACE },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    let child;
+    if (process.platform === 'win32') {
+      child = spawn('wsl', ['-u', 'saicharan', 'bash', '-c', 'export SHELLFORGE_WORKSPACE=/tmp/shellforge_ws; /home/saicharan/A7_OSSP_PROJECT/backend/shellforge_adapter'], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    } else {
+      child = spawn(ADAPTER_BIN, [], {
+        env: { ...process.env, SHELLFORGE_WORKSPACE: WORKSPACE },
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    }
 
     let stdout = '';
     let stderr = '';

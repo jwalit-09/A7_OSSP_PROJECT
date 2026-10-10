@@ -34,6 +34,10 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
 });
 
+const LOCAL_WORKSPACE = process.platform === 'win32'
+  ? '\\\\wsl$\\Ubuntu\\tmp\\shellforge_ws'
+  : WORKSPACE;
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -112,7 +116,7 @@ app.get('/api/files/raw', async (req, res) => {
   try {
     const meta = await callAdapter('stat', [reqPath]);
     if (meta.isDir) return fail(res, 'Cannot view directory as raw file');
-    const fullPath = join(WORKSPACE, reqPath);
+    const fullPath = join(LOCAL_WORKSPACE, reqPath);
     res.sendFile(fullPath);
   } catch (e) {
     fail(res, e.message, 422);
@@ -270,7 +274,7 @@ app.post('/api/files/upload', upload.single('file'), async (req, res) => {
   try {
     /* Touch file through C adapter to validate path and set permissions */
     await callAdapter('touch', [targetPath]);
-    const fullTarget = join(WORKSPACE, targetPath);
+    const fullTarget = join(LOCAL_WORKSPACE, targetPath);
     await fs.promises.writeFile(fullTarget, req.file.buffer);
     const meta = await callAdapter('stat', [targetPath]);
     ok(res, meta, `Uploaded ${fileName}`);
@@ -286,7 +290,7 @@ app.get('/api/files/download', async (req, res) => {
   try {
     const meta = await callAdapter('stat', [reqPath]);
     if (meta.isDir) return fail(res, 'Cannot download a directory');
-    const fullPath = join(WORKSPACE, reqPath);
+    const fullPath = join(LOCAL_WORKSPACE, reqPath);
     res.download(fullPath, meta.name);
   } catch (e) {
     fail(res, e.message, 422);
